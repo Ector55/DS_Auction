@@ -1,0 +1,75 @@
+
+body{
+    background-color: rgb(28, 30, 51);
+    color: white;
+    overflow: hidden;
+}
+.parent {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(5, 1fr);
+    gap: 8px;
+    justify-content: center;
+    text-align: center;
+    height: 99vh;
+}
+    
+.div1 {
+    grid-column: span 3 / span 3;
+    grid-row: span 4 / span 4;
+    grid-column-start: 2;
+    grid-row-start: 1;
+    border: 1px solid white;
+    border-radius: 8px;
+}
+
+.div2 {
+    grid-column-start: 2;
+    grid-row-start: 5;
+    background-color: green;
+    padding: 5px;
+    border-radius: 8px;
+    height: 90%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    
+}
+.div2:hover{
+    background-color: rgb(1, 92, 1);
+    transition: 0.3s;
+}
+
+.div3 {
+    grid-column-start: 4;
+    grid-row-start: 5;
+    background-color: red;
+    padding: 5px;
+    border-radius: 8px;
+    height: 90%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.div3:hover{
+    background-color: rgb(140, 0, 0);
+    transition: 0.3s;
+}
+
+.div4 {
+    grid-row: span 5 / span 5;
+    grid-column-start: 1;
+    grid-row-start: 1;
+    border: 1px solid white;
+    border-radius: 8px;
+    
+}
+
+.div5 {
+    grid-row: span 5 / span 5;
+    grid-column-start: 5;
+    grid-row-start: 1;
+    border: 1px solid white;
+    border-radius: 8px;
+}
+        
