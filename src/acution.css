@@ -34,7 +34,7 @@ body{
         0 0 20px #ffe600;
     letter-spacing: 5px;
 }
-    
+
 .div1 {
     grid-column: span 3 / span 3;
     grid-row: span 4 / span 4;
@@ -186,4 +186,3 @@ body{
     font-family: 'Press Start 2P', cursive;
     border-radius: 8px;
 }
-        
