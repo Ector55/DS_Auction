@@ -19,7 +19,7 @@ body{
     padding: 20px;
     box-sizing: border-box;
 }
-.div0 {
+.div0 { /* Header Section */
     grid-column: span 6;
     grid-row: 1;
     margin-bottom: 20px;
@@ -33,7 +33,6 @@ body{
         4px 4px 0px #ff00ff,
         0 0 20px #ffe600;
     letter-spacing: 5px;
-    /*voglio aggiungere il padding anche qui ma non lo legge per qualche motivo*/
 }
 
 .div1 { /* Item Display Section */
@@ -62,8 +61,9 @@ body{
     border: 3px solid #00f3ff;
     box-shadow: 0 0 10px #00f3ff, inset 0 0 20px rgba(0, 243, 255, 0.2);
     transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    /* padding between title and box?*/ 
 }
-.div2:hover{ 
+.div2:hover{ /* Auction Section Hover Effect */
     transform: translateY(-7px) scale(1.02);
     border-color: #ff00ff;
     box-shadow: 
