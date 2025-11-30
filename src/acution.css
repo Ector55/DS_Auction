@@ -33,9 +33,10 @@ body{
         4px 4px 0px #ff00ff,
         0 0 20px #ffe600;
     letter-spacing: 5px;
+    /*voglio aggiungere il padding anche qui ma non lo legge per qualche motivo*/
 }
 
-.div1 {
+.div1 { /* Item Display Section */
     grid-column: span 3 / span 3;
     grid-row: span 4 / span 4;
     grid-column-start: 2;
@@ -44,9 +45,11 @@ body{
     background-color: #151525;
     border: 3px solid #00f3ff;
     box-shadow: 0 0 10px #00f3ff, inset 0 0 20px rgba(0, 243, 255, 0.2);
+    padding: 10px;           
+    box-sizing: border-box;
 }
 
-.div2 {
+.div2 { /* Auction Section */
     grid-column-start: 2;
     grid-row-start: 6;
     background-color: green;
@@ -59,9 +62,8 @@ body{
     border: 3px solid #00f3ff;
     box-shadow: 0 0 10px #00f3ff, inset 0 0 20px rgba(0, 243, 255, 0.2);
     transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    
 }
-.div2:hover{
+.div2:hover{ 
     transform: translateY(-7px) scale(1.02);
     border-color: #ff00ff;
     box-shadow: 
@@ -69,11 +71,11 @@ body{
         inset 0 0 30px rgba(255, 0, 255, 0.3);
     z-index: 10;
 }
-.div2:active{
+.div2:active{ 
     transform: scale(0.98);
 }
 
-.div3 {
+.div3 { /* Bid Section */
     grid-column-start: 4;
     grid-row-start: 6;
     background-color: red;
@@ -100,7 +102,7 @@ body{
     transform: scale(0.98);
 }
 
-.div4 {
+.div4 { /* Chat Section */
     grid-row: span 5 / span 5;
     grid-column-start: 1;
     grid-row-start: 2;
@@ -113,9 +115,12 @@ body{
     align-items: center;
     text-align: center;
     flex-direction: column;
+    padding: 10px;          
+    box-sizing: border-box;  
+    gap: 5px;
 }
 
-.div5 {
+.div5 { /* History Section */
     grid-row: span 5 / span 5;
     grid-column-start: 5;
     grid-row-start: 2;
@@ -128,9 +133,12 @@ body{
     align-items: center;
     text-align: center;
     flex-direction: column;
+    padding: 10px;           
+    box-sizing: border-box;  
+    gap: 5px;
 }
 
-.title {
+.title { /* Titles for Chat and History */
     color: #00f3ff;
     font-size: 20px;
     text-transform: uppercase;
