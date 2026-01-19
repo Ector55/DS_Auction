@@ -2,11 +2,11 @@
 %%% @author crazy
 %%% @copyright (C) 2026, <COMPANY>
 %%% @doc
-%%% main server, Maintains a Map of AuctionID -> PID
+%%% Connection to the database
 %%% @end
-%%% Created : 02. gen 2026 17:10
+%%% Created : 19. gen 2026 16:50
 %%%-------------------------------------------------------------------
--module('DS_auction_manager').
+-module(db_connection).
 -author("crazy").
 
 %% API
