@@ -11,6 +11,7 @@
 
 %% API
 -export([start_monitor/0, monitor_auction/4]).
+%made by gemini need to work on this
 
 %% Funzione helper per interfacciare il monitor
 monitor_auction(Pid, Name, Dur, Val) ->

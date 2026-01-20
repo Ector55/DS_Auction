@@ -14,6 +14,7 @@
 
 -export([start_link/0, init/1]).
 
+%made by gemini need to work on this
 start_link() ->
   %% Avvia il supervisore locale registrato come my_supervisor
   supervisor:start_link({local, ?MODULE}, ?MODULE, []).

@@ -11,6 +11,7 @@
 
 -export([init/3]).
 -include("macro.hrl").
+%made by gemini need to work on this
 
 init(Name, Duration, MinOffer) ->
   %% Avvia il timer interno

@@ -7,5 +7,5 @@
 %%% Created : 20. gen 2026 17:50
 %%%-------------------------------------------------------------------
 -author("crazy").
-%%macro to define the erlang and java connection
+%%macro to define the erlang and java connection may need to change
 -define(JAVA_LISTENER, {mbox, listener@localhost}). %%change is necessary

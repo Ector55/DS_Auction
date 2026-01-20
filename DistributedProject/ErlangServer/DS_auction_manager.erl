@@ -11,6 +11,7 @@
 
 -behaviour(gen_server).
 -include("macro.hrl").
+%made by gemini need to work on this
 
 %% API
 -export([start_link/0, login/2, create_auction/5, get_active_auctions/0]).
