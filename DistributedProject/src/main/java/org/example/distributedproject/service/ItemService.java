@@ -69,8 +69,9 @@ public class ItemService {
             Item item = itemOpt.get();
             item.setStatus("ACTIVE");
             itemRepository.save(item);
-            return item.getId() + "," + item.getName() + ","+ item.getStartingPrice();
+            return item.getId() + "," + item.getName() + "," + item.getStartingPrice();
         }
         return "NO_ITEMS";
     }
+
 }
