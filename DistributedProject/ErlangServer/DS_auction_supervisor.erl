@@ -12,13 +12,23 @@
 -author("crazy").
 -behaviour(supervisor).
 
--export([start_link/0 ]).
+-export([start_link/0, init/1]).
 
-%%Starts the supervisor process decide if local or global
 start_link() ->
+  %% Avvia il supervisore locale registrato come my_supervisor
   supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
-%spawn delle auction dynamic, to add the specific parameters we want
-%i used the ones from others
-start_auction(AuctionID, EndTime, StartPrice, SellerID) ->
-  supervisor:start_child(?MODULE, [AuctionID, EndTime, StartPrice, SellerID]).
+init([]) ->
+  SupFlags = #{strategy => one_for_one, intensity => 3, period => 10},
+
+  %% 1. Il Server Principale (GenServer)
+  Server = #{id => main_server,
+    start => {main_server, start_link, []},
+    restart => permanent},
+
+  %% 2. Il Monitor delle Aste (Processo semplice)
+  Monitor = #{id => auctions_monitor,
+    start => {auctions_monitor, start_monitor, []},
+    restart => permanent},
+
+  {ok, {SupFlags, [Server, Monitor]}}.

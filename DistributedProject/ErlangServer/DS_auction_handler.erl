@@ -9,48 +9,68 @@
 -module('DS_auction_handler').
 -author("crazy").
 
-%% API
--export([start/4, loop/1]).
-%%function for clock, for bids and winner declaration and the state of the aucitons
-%%we used basic stuff for understanding
+-export([init/3]).
+-include("macro.hrl").
 
-%%state of theauction
--record(state, {
-  auction_pid,
-  item_name,
-  current_bid,
-  high_bidder = none,
-  time_remaining,
-  bids_history = []
-}).
+init(Name, Duration, MinOffer) ->
+  %% Avvia il timer interno
+  erlang:send_after(1000, self(), tick),
+  %% Stato iniziale: Nessun utente, nessuna offerta migliore
+  loop(Name, Duration, MinOffer, [], _BestOffer={0, none}).
 
+loop(Name, TimeLeft, MinOffer, Users, {BestVal, BestUser}) ->
+  receive
+  %% -- NUOVA OFFERTA --
+    {ClientPid, new_offer, Bid, User} ->
+      if
+        Bid > BestVal ->
+          %% Offerta valida
+          NewBest = {Bid, User},
 
-start(AuctionPID, StartingPrice, ItemName, Time) ->
-  io:format(" [AUCTION ~p] Started. Duration: ~p s~n", [AuctionPID, Time]),
+          %% 1. Aggiorna la UI Java (Realtime)
+          ?JAVA_LISTENER ! {self(), update_ui_bid, Name, Bid, User, TimeLeft},
 
-  erlang:send_after(1000, self(), {clock}), %default built in timer for erlang, 1000 = 1s
+          %% 2. Rispondi al client Erlang (se serve)
+          ClientPid ! {self(), {ok}},
 
-  InitialState = #state{
-    auction_pid = AuctionPID,
-    item_name = ItemName,
-    current_bid = StartingPrice,
-    time_remaining = Time
-  },
-  loop(InitialState).
+          loop(Name, TimeLeft, MinOffer, Users, NewBest);
+        true ->
+          %% Offerta troppo bassa
+          ClientPid ! {self(), {error, too_low}},
+          loop(Name, TimeLeft, MinOffer, Users, {BestVal, BestUser})
+      end;
 
-loop(State) ->
+  %% -- TIMER --
+    tick ->
+      NewTime = TimeLeft - 1,
+      if
+        NewTime =< 0 ->
+          %% TEMPO SCADUTO
+          winner(Name, BestUser);
+        true ->
+          %% Riavvia timer per il prossimo secondo
+          erlang:send_after(1000, self(), tick),
+          %% (Opzionale) Aggiorna UI Java col tempo
+          ?JAVA_LISTENER ! {self(), update_ui_timer, Name, NewTime},
+          loop(Name, NewTime, MinOffer, Users, {BestVal, BestUser})
+      end;
+
+  %% -- KILL SWITCH --
+    kill_auction_suicide ->
+      exit(killed);
+
+    _ -> loop(Name, TimeLeft, MinOffer, Users, {BestVal, BestUser})
   end.
 
+winner(Name, Winner) ->
+  ActualWinner = case Winner of none -> "NoWinner"; _ -> Winner end,
 
-%handling of the bids
-handle_bid(State, ClientPid, UserId, Amount) ->
-  end.
+  %% 1. Dì a Java di salvare il vincitore nel DB
+  io:format("[HANDLER] Asta ~p finita. Vincitore: ~p. Avviso Java.~n", [Name, ActualWinner]),
+  ?JAVA_LISTENER ! {self(), db_close_auction, Name, ActualWinner},
 
+  %% 2. Avvisa il Main Server di rimuovermi dalla lista RAM
+  gen_server:cast(main_server, {auction_ended, Name}),
 
-%handling of the cloc
-handle_clock(State) ->
-  end.
-
-%winner logic decision
-handle_winner(State) ->
-  end.
+  %% 3. Muori felice
+  exit(normal).
