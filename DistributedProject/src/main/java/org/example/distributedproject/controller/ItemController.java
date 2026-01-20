@@ -32,6 +32,7 @@ public class ItemController {
 
     @PostMapping()
     public ResponseEntity<Item> saveItem(@RequestBody Item item) {
+        item.setStatus("PENDING");
         Item item1 = itemService.save(item);
         return new ResponseEntity<>(item1, HttpStatus.CREATED);
     }
@@ -40,5 +41,21 @@ public class ItemController {
     public ResponseEntity<Item> updateItem(@PathVariable Long itemId, @RequestBody Item item) {
         Item item1 = itemService.update(itemId, item);
         return ResponseEntity.ok(item1);
+    }
+
+    @GetMapping("/next")
+    public ResponseEntity<String> getNextItem() {
+        String response = itemService.getNextPendingItem();
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{itemId}/bid")
+    public ResponseEntity<String> bid(@PathVariable Long itemId, @RequestParam Double amount, @RequestParam String userId) {
+        boolean success = itemService.placeBid(itemId, amount, userId);
+        if (success) {
+            return ResponseEntity.ok("Offerta inviata al motore d'asta!");
+        } else {
+            return ResponseEntity.status(500).body("Errore di connessione con l'Asta.");
+        }
     }
 }

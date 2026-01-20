@@ -11,17 +11,21 @@ public class Item {
     private Long id;
     private String name;
     private String type;
+    private String status;
+    private Double startingPrice;
     private String description;
 
     public Item(){
 
     }
 
-    public Item(Long id, String name, String type, String description) {
+    public Item(Long id, String name, String type, String description, String status, Double startingPrice) {
         this.id = id;
         this.name = name;
         this.type = type;
         this.description = description;
+        this.status = status;
+        this.startingPrice = startingPrice;
     }
 
     public Long getId() {
@@ -55,4 +59,12 @@ public class Item {
     public void setDescription(String description) {
         this.description = description;
     }
+
+    public String getStatus() {return status;}
+
+    public void setStatus(String status) {this.status = status;}
+
+    public Double getStartingPrice() {return startingPrice;}
+
+    public void setStartingPrice(Double startingPrice) {this.startingPrice = startingPrice;}
 }
