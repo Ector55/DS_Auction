@@ -4,8 +4,10 @@
 %%% @doc
 %%%
 %%% @end
-%%% Created : 20. gen 2026 17:50
+%%% Created : 23. gen 2026 17:33
 %%%-------------------------------------------------------------------
+-module(chat_handler).
 -author("crazy").
-%%macro to define the erlang and java connection may need to change
--define(JAVA_LISTENER, {mbox, listener@localhost}). %%change is necessary
+
+%% API
+-export([]).
