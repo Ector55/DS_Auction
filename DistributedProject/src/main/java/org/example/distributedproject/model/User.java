@@ -1,18 +1,32 @@
 package org.example.distributedproject.model;
 import jakarta.persistence.*;
 
+
 @Entity
-@Table(name = "utenti")
+@Table(name = "users")
 public class User {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+    @Column(nullable = false)
     private String name;
+
+    @Column(nullable = false)
     private String surname;
+
+    @Column(nullable = false, unique = true, length = 50)
     private String userName;
+
+    @Column(nullable = false, unique = true)
     private String email;
+
+    @Column(nullable = false)
     private String password;
+
+    @Column(nullable = false)
     private int age;
+
+    @Column(nullable = false)
     private String paymentInfo;
 
     public User() {

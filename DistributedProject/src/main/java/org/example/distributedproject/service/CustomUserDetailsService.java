@@ -17,19 +17,17 @@ public class CustomUserDetailsService implements UserDetailsService {
     private UserRepository userRepository;
 
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-        // Cerca l'utente nel tuo DB (assicurati che UserRepository abbia findByUsername o simile)
-        // Se nel tuo User.java il campo si chiama 'email' o 'name', usa quello.
+    public UserDetails loadUserByUsername(String usernameInput) throws UsernameNotFoundException {
         User user = userRepository.findAll().stream()
-                .filter(u -> u.getName().equals(username)) // O u.getEmail()
+                .filter(u -> u.getUserName().equals(usernameInput))
                 .findFirst()
-                .orElseThrow(() -> new UsernameNotFoundException("Utente non trovato: " + username));
+                .orElseThrow(() -> new UsernameNotFoundException("Utente non trovato con username: " + usernameInput));
 
-        // Ritorna l'oggetto User di Spring Security
+        // Costruiamo l'utente per Spring
         return new org.springframework.security.core.userdetails.User(
-                user.getName(),
-                user.getPassword(), // Deve essere criptata nel DB!
-                new ArrayList<>() // Lista dei ruoli (vuota per ora)
+                user.getUserName(),  // Usiamo userName come identificativo
+                user.getPassword(),
+                new ArrayList<>()
         );
     }
 }

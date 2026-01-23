@@ -9,10 +9,20 @@ public class Item {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(nullable = false)
     private String name;
+
+    @Column(nullable = false)
     private String type;
+
+    @Column(nullable = false)
     private String status;
+
+    @Column(name = "starting_price", nullable = false)
     private Double startingPrice;
+
+    @Column(nullable = false, length = 1000)
     private String description;
 
     public Item(){
