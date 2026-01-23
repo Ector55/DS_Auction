@@ -3,6 +3,7 @@ package org.example.distributedproject.service;
 import org.example.distributedproject.model.User;
 import org.example.distributedproject.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
@@ -12,6 +13,8 @@ import java.util.List;
 public class UserService {
     @Autowired
     private UserRepository userRepository;
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     public List<User> findAll() {
         List<User> users = userRepository.findAll();
@@ -26,6 +29,9 @@ public class UserService {
     }
 
     public User save(User user) {
+        // Cripta la password prima di salvare
+        String encodedPassword = passwordEncoder.encode(user.getPassword());
+        user.setPassword(encodedPassword);
         return userRepository.save(user);
     }
 
@@ -46,4 +52,5 @@ public class UserService {
         user1.setEmail(user.getEmail());
         return userRepository.save(user1);
     }
+
 }
