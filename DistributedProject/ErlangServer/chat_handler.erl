@@ -12,9 +12,9 @@ start(AuctionID) ->
 
 loop(AuctionID, Participants) ->
   receive
-  %% Un utente si unisce alla chat dell'asta
+  %% user joinf auction chat
     {join, ClientPid} ->
-      io:format("[CHAT ~p] Nuovo partecipante: ~p~n", [AuctionID, ClientPid]),
+      io:format("[CHAT ~p] New partecipant: ~p~n", [AuctionID, ClientPid]),
       loop(AuctionID, [ClientPid | Participants]);
 
   %% Un utente invia un messaggio
@@ -26,13 +26,13 @@ loop(AuctionID, Participants) ->
         text => Content,
         time => Timestamp
       },
-      %% Invia il messaggio a tutti i partecipanti (broadcast)
+      %broadcast message to partecipants
       lists:foreach(fun(Pid) -> Pid ! {chat_msg, Message} end, Participants),
       loop(AuctionID, Participants);
 
-  %% Gestione chiusura chat al termine dell'asta
+  %% shutting down after the auction
     stop ->
-      io:format("[CHAT ~p] Chiusura in corso...~n", [AuctionID]),
+      io:format("[CHAT ~p] Closing...~n", [AuctionID]),
       ok;
 
     _Other ->

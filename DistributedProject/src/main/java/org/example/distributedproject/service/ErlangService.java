@@ -11,23 +11,21 @@ import java.io.IOException;
 public class ErlangService {
     private OtpNode node;
     private OtpMbox mbox;
-    private final String erlangNodeName = "server@localhost"; //MODIFICARE
-    private final String cookie = "mypassword"; //DA MODIFICARE
+    private final String erlangNodeName = "java_node@localhost"; //for now its modified
+    private final String cookie = "mypassword"; //MODIFY!!
 
     @PostConstruct
     public void init() throws IOException {
         // Creates Java Node
         node = new OtpNode("java_node@localhost", cookie);
-        // Crea la mailbox con lo stesso nome usato nelle macro Erlang (?JAVA_LISTENER)
+        // creates the mailbox with same name as macro Erlang (?JAVA_LISTENER)
         mbox = node.createMbox("java_listener");
-
-        // Avvia il thread in ascolto per i messaggi in arrivo (es. notifiche chat o fine asta)
+        //starts the listening threads for incoming messages (modification or auction ending)
         Thread listenerThread = new Thread(this::listen);
         listenerThread.setDaemon(true);
         listenerThread.start();
     }
-
-    // Invia un messaggio alla chat di una specifica asta
+    //sends a message to the chat at a specific auction
     public void sendChatMessage(int auctionId, String user, String message) {
         try {
             String chatProcessName = "chat_" + auctionId;
@@ -42,21 +40,21 @@ public class ErlangService {
         }
     }
 
-    // Thread che riceve messaggi da Erlang
+    //thread that receives messages from erlang
     private void listen() {
         while (true) {
             try {
                 OtpErlangObject msg = mbox.receive();
                 if (msg instanceof OtpErlangTuple) {
                     OtpErlangTuple tuple = (OtpErlangTuple) msg;
-                    // Qui gestisci i messaggi ricevuti, ad esempio:
+                    //handling incoming messages
                     // {chat_msg, #{auction_id => ..., user => ..., text => ...}}
-                    System.out.println("Messaggio ricevuto da Erlang: " + tuple);
+                    System.out.println("Message received from Erlang: " + tuple);
 
                     // TODO: Inoltrare il messaggio ai WebSocket dei client (Spring SimpMessagingTemplate)
                 }
             } catch (Exception e) {
-                System.err.println("Errore ricezione Erlang: " + e.getMessage());
+                System.err.println("Error receiving Erlang: " + e.getMessage());
             }
         }
     }

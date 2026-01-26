@@ -46,17 +46,17 @@ public class ItemService {
     }
 
     public boolean placeBid(Long itemId, Double amount, String userId) {
-        String erlangHost = "localhost";
+        String erlangHost = "localhost"; //65
         int erlangPort = 9000;
 
         try (Socket socket = new Socket(erlangHost, erlangPort)) {
             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
             String command = "BID:" + itemId + ":" + amount + ":" + userId;
             out.println(command);
-            System.out.println(">> Comando inviato a Erlang: " + command);
+            System.out.println(">> Command sent to Erlang: " + command);
             return true;
         } catch (Exception e) {
-            System.err.println("ERRORE: Impossibile contattare il server Erlang!");
+            System.err.println("ERROR: It is not possible to contact the Erlang Server!");
             e.printStackTrace();
             return false;
         }

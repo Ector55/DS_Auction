@@ -53,9 +53,9 @@ public class ItemController {
     public ResponseEntity<String> bid(@PathVariable Long itemId, @RequestParam Double amount, @RequestParam String userId) {
         boolean success = itemService.placeBid(itemId, amount, userId);
         if (success) {
-            return ResponseEntity.ok("Offerta inviata al motore d'asta!");
+            return ResponseEntity.ok("Offer sent to the handler!");
         } else {
-            return ResponseEntity.status(500).body("Errore di connessione con l'Asta.");
+            return ResponseEntity.status(500).body("Error while connecting to the Auction.");
         }
     }
 }

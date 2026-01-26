@@ -19,15 +19,15 @@ public class SpringSecurity {
         http
                 .csrf(AbstractHttpConfigurer::disable) // Disabilita CSRF (necessario per POST da Postman/Erlang)
                 .authorizeHttpRequests(auth -> auth
-                        // 1. Endpoint pubblici (Registrazione e API per Erlang)
+                        // 1. Public Endpoint (Registrazione e API per Erlang)
                         .requestMatchers("/api/users/register", "/api/items/next", "/api/auctions/close").permitAll()
-                        // 2. Tutto il resto richiede autenticazione (Basic Auth)
+                        // 2. request authentication
                         .anyRequest().authenticated()
                 )
-                .httpBasic(Customizer.withDefaults()); // Abilita Basic Auth
+                .httpBasic(Customizer.withDefaults()); //  Basic Auth
         return http.build();
     }
-    // Bean per criptare le password (Obbligatorio)
+    // cript the password
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();

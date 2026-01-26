@@ -21,11 +21,11 @@ public class CustomUserDetailsService implements UserDetailsService {
         User user = userRepository.findAll().stream()
                 .filter(u -> u.getUserName().equals(usernameInput))
                 .findFirst()
-                .orElseThrow(() -> new UsernameNotFoundException("Utente non trovato con username: " + usernameInput));
+                .orElseThrow(() -> new UsernameNotFoundException("User not found: " + usernameInput));
 
         // Costruiamo l'utente per Spring
         return new org.springframework.security.core.userdetails.User(
-                user.getUserName(),  // Usiamo userName come identificativo
+                user.getUserName(),  // username is the unique ID
                 user.getPassword(),
                 new ArrayList<>()
         );

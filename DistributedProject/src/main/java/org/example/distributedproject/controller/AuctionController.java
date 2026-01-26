@@ -8,6 +8,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+//Controller responsible for handling Auction-related operations.
+//It acts as a bridge between the frontend, the database, and the Erlang backend node.
 @RestController
 @RequestMapping("/api/auctions")
 public class AuctionController {
@@ -15,26 +17,36 @@ public class AuctionController {
     @Autowired
     private ItemRepository itemRepository;
 
+    //Service used to communicate with the distributed Erlang node/cluster
     @Autowired
     private ErlangService erlangService;
 
+    //Endpoint to finalize an auction.
     @PostMapping("/close")
     public void closeAuction(@RequestParam Long itemId, @RequestParam String winner, @RequestParam Double price) {
-        System.out.println("Erlang ha chiuso l'asta " + itemId + ". Vin: " + winner + "Price: " + price);
+
+        System.out.println("Erlang closed auction " + itemId + ". Winner: " + winner + " Price: " + price);
+
+        // Retrieve the item from the database using the provided ID.
         Item item = itemRepository.findById(itemId).orElse(null);
-        if(item != null) {
+
+        //If the item exists in the database, update its status
+        if (item != null) {
             item.setStatus("SOLD");
             itemRepository.save(item);
         }
     }
 
+    //Endpoint to handle sending chat messages within a specific auction.
     @PostMapping("/{id}/chat")
     public ResponseEntity<?> postChatMessage(@PathVariable int id, @RequestParam String message) {
+        //Retrieve the currently authenticated username
         String currentUser = SecurityContextHolder.getContext().getAuthentication().getName();
 
-        // Invia il messaggio al processo Erlang chat_handler dell'asta specifica
+        // Send the message to the specific auction's 'chat_handler' process on the Erlang node.
         erlangService.sendChatMessage(id, currentUser, message);
 
+        //HTTP 200 OK
         return ResponseEntity.ok().build();
     }
 }
