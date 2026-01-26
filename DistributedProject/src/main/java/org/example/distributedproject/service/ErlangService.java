@@ -11,12 +11,12 @@ import java.io.IOException;
 public class ErlangService {
     private OtpNode node;
     private OtpMbox mbox;
-    private final String erlangNodeName = "server@localhost"; // Il nome del tuo nodo Erlang
-    private final String cookie = "mypassword"; // Deve coincidere con quello di Erlang
+    private final String erlangNodeName = "server@localhost"; //MODIFICARE
+    private final String cookie = "mypassword"; //DA MODIFICARE
 
     @PostConstruct
     public void init() throws IOException {
-        // Crea il nodo Java
+        // Creates Java Node
         node = new OtpNode("java_node@localhost", cookie);
         // Crea la mailbox con lo stesso nome usato nelle macro Erlang (?JAVA_LISTENER)
         mbox = node.createMbox("java_listener");
@@ -65,5 +65,5 @@ public class ErlangService {
     public void shutdown() {
         if (node != null) node.close();
     }
-    
+
 }
