@@ -14,25 +14,24 @@
 %% API
 -export([start_link/0]).
 
-%% GenServer Callbacks
+%% GenServer Callbacks, default, these callback are necessary bc of the framework
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
-%note that the private functions are not exported
-%% CONFIGURATION
--define(JAVA_NODE, 'java_node@localhost').      %% The name of the Java Node
--define(JAVA_MAILBOX, 'java_listener').         %% The name of the Mailbox created in Java
--define(POLL_INTERVAL, 5000).                   %% How often to check for new auctions (ms)
+%note that the private functions are not exported, helper and internal
+%CONFIGURATION
+-define(JAVA_NODE, 'java_node@localhost').      %name of the Java Node to communicate
+-define(JAVA_MAILBOX, 'java_listener').         %name of the Mailbox created in Java
+-define(POLL_INTERVAL, 5000).                   %how often to check for new auctions (ms)
 
 
-%% active_slots: A Map linking the PID of the auction process to its AuctionID.
+%structure of the internal state of the server.
 -record(state, {
-  active_slots = #{} :: map()
+  active_slots = #{} :: map() %map of active process that will be populated
 }).
-
-
 
 %%Starts the server and registers it locally. %like in the monitor
 start_link() ->
   gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
+%saver process with its local name and call backs are ion this module
 
 %% ===================================================================
 %% GEN_SERVER CALLBACKS
@@ -41,30 +40,30 @@ start_link() ->
 %%Initializes the server. Starts the periodic timer.
 init([]) ->
   io:format("[MONITOR] Server started. Waiting for Java...~n"),
-  %% Start the periodic timer. It sends 'check_for_auctions' to self() every 5s.
+  %start the periodic timer. It sends 'check_for_auctions' to self() every 5s.
   timer:send_interval(?POLL_INTERVAL, check_for_auctions), %message sent like an atom
-  {ok, #state{active_slots = #{}}}.
+  {ok, #state{active_slots = #{}}}. %ok mess, at th ebaginning empty map
 
-%% when the atom is received : Checks availability and fetches auctions.
+%when the atom is received : Checks availability and fetches auctions.
 handle_info(check_for_auctions, State) ->
   CurrentActive = maps:size(State#state.active_slots),
-  MaxSlots = 3,
+  MaxSlots = 3, %check active auctionsn with the max of 3
 
   if %if less than 3 needs to search for a new auction in the DB or how many are needed
     CurrentActive < MaxSlots ->
-      %% We have space! Calculate how many auctions we can take.
+      %%Calculate how many auctions we can take.
       SlotsAvailable = MaxSlots - CurrentActive,
       io:format("[MONITOR] Slots free: ~p. Requesting auctions from Java...~n", [SlotsAvailable]),
 
-      %% 1. Ask Java for new auctions (RPC Call)
+      %% 1. Ask Java for new auctions (RPC Call), call the private function
       NewAuctions = fetch_auctions_rpc(SlotsAvailable), %call this function
 
-      %% 2. Start the received auctions
+      %% 2. Start the received auctions from java
       NewState = start_auctions_batch(NewAuctions, State),
-      {noreply, NewState};
+      {noreply, NewState}; %use new state
 
     true ->
-      %% No space left. Do nothing.
+      %if slots are ok, do nothing.
       io:format("[MONITOR] All slots full (~p/~p). Skipping request.~n", [CurrentActive, MaxSlots]),
       {noreply, State}
   end;
@@ -72,7 +71,7 @@ handle_info(check_for_auctions, State) ->
 %%Handles the death of an auction process.
 %% This message is sent automatically by Erlang when a monitored process dies.
 handle_info({'DOWN', _Ref, process, Pid, Reason}, State) ->
-  ActiveSlots = State#state.active_slots,
+  ActiveSlots = State#state.active_slots, %PID = who dies, reason is why(normal or error)
 
   %% Check if the dead process was one of our auctions
   case maps:find(Pid, ActiveSlots) of
@@ -93,7 +92,7 @@ handle_info(Info, State) ->
   io:format("[MONITOR] Unexpected message: ~p~n", [Info]),
   {noreply, State}.
 
-%% Unused callbacks
+%% Unused callbacks, necessary by default
 handle_call(_Request, _From, State) -> {reply, ok, State}.
 handle_cast(_Msg, State) -> {noreply, State}.
 terminate(_Reason, _State) -> ok.
@@ -112,7 +111,7 @@ fetch_auctions_rpc(Count) ->
 
   %% Send message to the Java Mailbox
   %% Format: {SenderPID, RequestID, Command, Argument}
-  {?JAVA_MAILBOX, ?JAVA_NODE} ! {self(), MsgId, get_next_auctions, Count},
+  {?JAVA_MAILBOX, ?JAVA_NODE} ! {self(), MsgId, get_next_auctions, Count}, %{who, IDreq, comando, arg}
 
   %% Wait for the reply
   receive
