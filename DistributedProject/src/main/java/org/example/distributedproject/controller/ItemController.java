@@ -43,11 +43,6 @@ public class ItemController {
         return ResponseEntity.ok(item1);
     }
 
-    @GetMapping("/next")
-    public ResponseEntity<String> getNextItem() {
-        String response = itemService.getNextPendingItem();
-        return ResponseEntity.ok(response);
-    }
 
     @PostMapping("/{itemId}/bid")
     public ResponseEntity<String> bid(@PathVariable Long itemId, @RequestParam Double amount, @RequestParam String userId) {

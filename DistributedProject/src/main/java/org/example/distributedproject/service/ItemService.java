@@ -63,15 +63,14 @@ public class ItemService {
     }
 
     @Transactional
-    public String getNextPendingItem() {
+    public Item activateAndGetNextItem() {
         Optional<Item> itemOpt = itemRepository.findFirstByStatusOrderByIdAsc("PENDING");
         if (itemOpt.isPresent()) {
             Item item = itemOpt.get();
             item.setStatus("ACTIVE");
-            itemRepository.save(item);
-            return item.getId() + "," + item.getName() + "," + item.getStartingPrice();
+            return itemRepository.save(item); // Ritorna l'oggetto aggiornato
         }
-        return "NO_ITEMS";
+        return null; // Nessun item disponibile
     }
 
 }
