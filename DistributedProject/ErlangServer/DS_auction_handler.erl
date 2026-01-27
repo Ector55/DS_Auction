@@ -14,7 +14,7 @@
 -export([start/4, loop/1]).
 
 %% time synchronization api(Cristian's algortihm)
--export([get_server_time/1, sync_time/1]).
+-export([get_server_time/1, get_server_time/2, sync_time/1, sync_time/2]).
 
 %% State record
 -record(state, {
@@ -239,36 +239,38 @@ handle_winner(State) ->
 
 %% Get raw  server time from auction process
 get_server_time(AuctionID) ->
+  get_server_time(AuctionID, node()).
+
+get_server_time(AuctionID, Node) ->  
   AuctionName = list_to_atom("auction_" ++ integer_to_list(AuctionID)),
-  case whereis(AuctionName) of
-    undefined -> {error, auction_not_found};
-    Pid ->
-      Pid ! {get_time, self()},
-      receive
-        {time_response, ServerTime} ->
-          {ok, ServerTime}
-      after 5000 ->
-        {error, timeout}
-      end
+
+  {AuctionName, Node} ! {get_time, self()},
+  receive
+    {time_response, ServerTime} ->
+      {ok, ServerTime}
+  after 5000 ->
+    {error, timeout}
   end.
 
 % synchronize local time with server time using Cristian's algorithm
+
+% sync with local auction (same node)
 sync_time(AuctionID) ->
+  sync_time(AuctionID, node()).
+
+% sync with remote auction (across nodes)  
+sync_time(AuctionID, Node) ->
   AuctionName = list_to_atom("auction_" ++ integer_to_list(AuctionID)),
-  case whereis (AuctionName) of
-    undefined -> {error, auction_not_found};
-    Pid ->
-      T1 = erlang:system_time(millisecond),
-      Pid ! {get_time, self()},
-      receive
-        {time_response, ServerTime} ->
-          T2 = erlang:system_time(millisecond),
-          RTT = T2 - T1,
-          Offset = ServerTime + (RTT div 2) - T2,
-          io:format("Time sync with auction ~p: RTT=~p ms, Offset=~p ms~n", 
-                    [AuctionID, RTT, Offset]),
-          {ok, #{offset => Offset, rtt => RTT, server_time => ServerTime}}
-      after 5000 ->
-        {error, timeout}
-      end
+  T1 = erlang:system_time(millisecond),
+  {AuctionName, Node} ! {get_time, self()},
+  receive
+    {time_response, ServerTime} ->
+      T2 = erlang:system_time(millisecond),
+      RTT = T2 - T1,
+      Offset = ServerTime + (RTT div 2) - T2,
+      io:format("[TIME SYNC] Auction ~p@~p: RTT=~p ms, Offset=~p ms~n", 
+                [AuctionID, Node, RTT, Offset]),
+      {ok, #{offset => Offset, rtt => RTT, server_time => ServerTime, node => Node}}
+  after 5000 ->
+    {error, timeout}
   end.
