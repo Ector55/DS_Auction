@@ -18,8 +18,8 @@ public class AuctionController {
     private ItemRepository itemRepository;
 
     //Service used to communicate with the distributed Erlang node/cluster
-    @Autowired
-    private ErlangService erlangService;
+   @Autowired
+   private ErlangService erlangService;
 
     //Endpoint to finalize an auction.
     @PostMapping("/close")
@@ -37,7 +37,7 @@ public class AuctionController {
         }
     }
 
-    //Endpoint to handle sending chat messages within a specific auction.
+  //Endpoint to handle sending chat messages within a specific auction.
     @PostMapping("/{id}/chat")
     public ResponseEntity<?> postChatMessage(@PathVariable int id, @RequestParam String message) {
         //Retrieve the currently authenticated username
@@ -49,4 +49,5 @@ public class AuctionController {
         //HTTP 200 OK
         return ResponseEntity.ok().build();
     }
+
 }

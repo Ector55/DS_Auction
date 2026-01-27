@@ -20,7 +20,7 @@ public class SpringSecurity {
                 .csrf(AbstractHttpConfigurer::disable) // Disabilita CSRF (necessario per POST da Postman/Erlang)
                 .authorizeHttpRequests(auth -> auth
                         // 1. Public Endpoint (Registrazione e API per Erlang)
-                        .requestMatchers("/api/users/register", "/api/items/next", "/api/auctions/close").permitAll()
+                        .requestMatchers("/api/users/register", "/api/items/next", "/api/auctions/close", "/api/items").permitAll()
                         // 2. request authentication
                         .anyRequest().authenticated()
                 )

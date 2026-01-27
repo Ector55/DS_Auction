@@ -11,13 +11,13 @@ import java.io.IOException;
 public class ErlangService {
     private OtpNode node;
     private OtpMbox mbox;
-    private final String erlangNodeName = "java_node@localhost"; //for now its modified
+    private final String erlangNodeName = "DS_auction_monitor"; //for now its modified
     private final String cookie = "mypassword"; //MODIFY!!
 
     @PostConstruct
     public void init() throws IOException {
         // Creates Java Node
-        node = new OtpNode("java_node@localhost", cookie);
+        node = new OtpNode(erlangNodeName, cookie);
         // creates the mailbox with same name as macro Erlang (?JAVA_LISTENER)
         mbox = node.createMbox("java_listener");
         //starts the listening threads for incoming messages (modification or auction ending)

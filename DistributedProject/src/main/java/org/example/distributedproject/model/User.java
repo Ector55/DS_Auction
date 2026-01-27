@@ -33,7 +33,8 @@ public class User {
 
     }
 
-    public User(String name, String surname, String userName, String email, String password, int age, String paymentInfo) {
+    public User(Long id, String name, String surname, String userName, String email, String password, int age, String paymentInfo) {
+        this.id = id;
         this.name = name;
         this.surname = surname;
         this.userName = userName;
