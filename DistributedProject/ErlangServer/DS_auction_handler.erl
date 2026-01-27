@@ -13,6 +13,9 @@
 %% API
 -export([start/4, loop/1]).
 
+%% time synchronization api(Cristian's algortihm)
+-export([get_server_time/1, sync_time/1]).
+
 %% State record
 -record(state, {
   auction_id,
@@ -21,7 +24,8 @@
   high_bidder = none,
   time_remaining,
   bids_history = [],
-  extend_threshold = 10  % Extend if bid arrives with <= 10 seconds left
+  extend_threshold = 10,  % Extend if bid arrives with <= 10 seconds left
+  server_start_time       % time when auction started on server
 }).
 
 
@@ -37,7 +41,8 @@ start(AuctionID, StartingPrice, ItemName, Duration) ->
     auction_id = AuctionID,
     item_name = ItemName,
     current_bid = StartingPrice,
-    time_remaining = Duration
+    time_remaining = Duration,
+    server_start_time = erlang:system_time(millisecond)
   },
   
   %% register this process so it can be found by auction ID
@@ -55,7 +60,7 @@ loop(State) ->
       
       if 
         NewTime =< 0 -> 
-          handle_winner(State); %% Auction ended go to handle winner
+          handle_winner(State); %% Auction ended go to handle_winner
         true -> 
           erlang:send_after(1000, self(), clock),  %% Continue countdown
           
@@ -95,6 +100,12 @@ loop(State) ->
   
     {get_history, ClientPid} ->
       ClientPid ! {history, lists:reverse(State#state.bids_history)},
+      loop(State);
+
+    %% time synchronization using Cristian's algorithm  
+    {get_time, ClientPid} ->
+      ServerTime = erlang:system_time(millisecond),
+      ClientPid ! {time_response, ServerTime},
       loop(State);
 
     %% UNKNOWN MESSAGE - ignore and continue loop
@@ -214,3 +225,50 @@ handle_winner(State) ->
     item_name => ItemName,
     total_bids => length(State#state.bids_history)
   }}.
+
+
+%% CRISTIAN'S ALGORITHM - Time Synchronization
+
+%% Algorithm:
+%%   1. Client records T1 (local time before request)
+%%   2. Client sends {get_time, self()} to auction process
+%%   3. Server responds with {time_response, ServerTime}
+%%   4. Client records T2 (local time after response)
+%%   5. RTT = T2 - T1
+%%   6. Offset = ServerTime + (RTT / 2) - T2
+
+%% Get raw  server time from auction process
+get_server_time(AuctionID) ->
+  AuctionName = list_to_atom("auction_" ++ integer_to_list(AuctionID)),
+  case whereis(AuctionName) of
+    undefined -> {error, auction_not_found};
+    Pid ->
+      Pid ! {get_time, self()},
+      receive
+        {time_response, ServerTime} ->
+          {ok, ServerTime}
+      after 5000 ->
+        {error, timeout}
+      end
+  end.
+
+% synchronize local time with server time using Cristian's algorithm
+sync_time(AuctionID) ->
+  AuctionName = list_to_atom("auction_" ++ integer_to_list(AuctionID)),
+  case whereis (AuctionName) of
+    undefined -> {error, auction_not_found};
+    Pid ->
+      T1 = erlang:system_time(millisecond),
+      Pid ! {get_time, self()},
+      receive
+        {time_response, ServerTime} ->
+          T2 = erlang:system_time(millisecond),
+          RTT = T2 - T1,
+          Offset = ServerTime + (RTT div 2) - T2,
+          io:format("Time sync with auction ~p: RTT=~p ms, Offset=~p ms~n", 
+                    [AuctionID, RTT, Offset]),
+          {ok, #{offset => Offset, rtt => RTT, server_time => ServerTime}}
+      after 5000 ->
+        {error, timeout}
+      end
+  end.
