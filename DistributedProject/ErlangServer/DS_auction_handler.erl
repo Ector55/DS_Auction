@@ -32,11 +32,11 @@
 %% start an auction
 
 start(AuctionID, StartingPrice, ItemName, Duration) ->
-  io:format("[AUCTION ~p] Started. Item: '~s', Starting price: ~p, Duration: ~p s~n", 
-            [AuctionID, ItemName, StartingPrice, Duration]),
-  
+  io:format("[AUCTION ~p] Started. Item: '~s', Starting price: ~p, Duration: ~p s~n",
+    [AuctionID, ItemName, StartingPrice, Duration]),
+
   erlang:send_after(1000, self(), clock),
-  
+
   InitialState = #state{
     auction_id = AuctionID,
     item_name = ItemName,
@@ -44,45 +44,45 @@ start(AuctionID, StartingPrice, ItemName, Duration) ->
     time_remaining = Duration,
     server_start_time = erlang:system_time(millisecond)
   },
-  
+
   %% register this process so it can be found by auction ID
   register(list_to_atom("auction_" ++ integer_to_list(AuctionID)), self()),
-  
+
   loop(InitialState).
 
 %% main Loop - to receive and handle messages
 
 loop(State) ->
   receive
-    %% CLOCK TICK - Decrements timer every second
+  %% CLOCK TICK - Decrements timer every second
     clock ->
       NewTime = State#state.time_remaining - 1,
-      
-      if 
-        NewTime =< 0 -> 
+
+      if
+        NewTime =< 0 ->
           handle_winner(State); %% Auction ended go to handle_winner
-        true -> 
+        true ->
           erlang:send_after(1000, self(), clock),  %% Continue countdown
-          
+
           %% Log every 30 seconds can be removed later
-          if 
+          if
             NewTime rem 30 =:= 0 ->
-              io:format("[AUCTION ~p] ~p seconds remaining~n", 
-                        [State#state.auction_id, NewTime]);
-            true -> 
+              io:format("[AUCTION ~p] ~p seconds remaining~n",
+                [State#state.auction_id, NewTime]);
+            true ->
               ok
           end,
-          
+
           loop(State#state{time_remaining = NewTime})
       end;
 
-    %% BID - handle incoming bid 
+  %% BID - handle incoming bid
 
     {ClientPid, bid, UserId, Amount} ->
       NewState = handle_bid(State, ClientPid, UserId, Amount),
       loop(NewState);
 
-    %% GET STATUS - return current auction state
+  %% GET STATUS - return current auction state
 
     {get_status, ClientPid} ->
       Status = #{
@@ -96,22 +96,22 @@ loop(State) ->
       ClientPid ! {status, Status},
       loop(State);
 
-    %% GET HISTORY - Return bid history
-  
+  %% GET HISTORY - Return bid history
+
     {get_history, ClientPid} ->
       ClientPid ! {history, lists:reverse(State#state.bids_history)},
       loop(State);
 
-    %% time synchronization using Cristian's algorithm  
+  %% time synchronization using Cristian's algorithm
     {get_time, ClientPid} ->
       ServerTime = erlang:system_time(millisecond),
       ClientPid ! {time_response, ServerTime},
       loop(State);
 
-    %% UNKNOWN MESSAGE - ignore and continue loop
-     _Other ->
+  %% UNKNOWN MESSAGE - ignore and continue loop
+    _Other ->
       loop(State)
-   
+
   end.
 
 
@@ -122,56 +122,56 @@ handle_bid(State, ClientPid, UserId, Amount) ->
   CurrentBid = State#state.current_bid,
   HighBidder = State#state.high_bidder,
   TimeRemaining = State#state.time_remaining,
-  
+
 
   if
-    %% Check if auction is still ongoing
+  %% Check if auction is still ongoing
     TimeRemaining =< 0 ->
       io:format("[AUCTION ~p] Bid rejected: auction ended~n", [AuctionID]),
       ClientPid ! {bid_rejected, auction_ended},
       State;
-    
-    %% Check if bid is higher than current price
+
+  %% Check if bid is higher than current price
     Amount =< CurrentBid ->
-      io:format("[AUCTION ~p] Bid rejected: ~p not higher than ~p~n", 
-                [AuctionID, Amount, CurrentBid]),
+      io:format("[AUCTION ~p] Bid rejected: ~p not higher than ~p~n",
+        [AuctionID, Amount, CurrentBid]),
       ClientPid ! {bid_rejected, bid_too_low},
       State;
-    
-    %% Check so that there are no consecutive bids)
+
+  %% Check so that there are no consecutive bids)
     UserId =:= HighBidder ->
-      io:format("[AUCTION ~p] Bid rejected: user ~p cannot bid consecutively~n", 
-                [AuctionID, UserId]),
+      io:format("[AUCTION ~p] Bid rejected: user ~p cannot bid consecutively~n",
+        [AuctionID, UserId]),
       ClientPid ! {bid_rejected, consecutive_bid_not_allowed},
       State;
-    
-    %% if all checks passed - accept the bid
+
+  %% if all checks passed - accept the bid
     true ->
-      io:format("[AUCTION ~p] Bid ACCEPTED: ~p by user ~p~n", 
-                [AuctionID, Amount, UserId]),
-      
+      io:format("[AUCTION ~p] Bid ACCEPTED: ~p by user ~p~n",
+        [AuctionID, Amount, UserId]),
+
       %% Record bid in history
       Timestamp = erlang:system_time(second),
       BidRecord = #{
-        user_id => UserId, 
-        amount => Amount, 
+        user_id => UserId,
+        amount => Amount,
         timestamp => Timestamp
       },
       NewHistory = [BidRecord | State#state.bids_history],
-      
+
       %% Check if we need to extend time (bid in last 10 seconds)
       ExtendThreshold = State#state.extend_threshold,
       NewTime = if
-        TimeRemaining =< ExtendThreshold ->
-          io:format("[AUCTION ~p] Timer EXTENDED to 30 seconds~n", [AuctionID]),
-          30;
-        true ->
-          TimeRemaining
-      end,
-      
+                  TimeRemaining =< ExtendThreshold ->
+                    io:format("[AUCTION ~p] Timer EXTENDED to 30 seconds~n", [AuctionID]),
+                    30;
+                  true ->
+                    TimeRemaining
+                end,
+
       %% Send success response to bidder
       ClientPid ! {bid_accepted, Amount, NewTime},
-      
+
       %% Return updated state
       State#state{
         current_bid = Amount,
@@ -189,7 +189,7 @@ handle_winner(State) ->
   Winner = State#state.high_bidder,
   FinalPrice = State#state.current_bid,
   ItemName = State#state.item_name,
-  
+
   case Winner of
     none ->
       io:format("~n========================================~n"),
@@ -205,18 +205,18 @@ handle_winner(State) ->
       io:format("Total Bids: ~p~n", [length(State#state.bids_history)]),
       io:format("========================================~n~n")
   end,
-  
-  %% Notify manager that auction ended 
+
+  %% Notify manager that auction ended
   case whereis('DS_auction_manager') of
-    undefined -> 
+    undefined ->
       ok;
-    ManagerPid -> 
+    ManagerPid ->
       ManagerPid ! {auction_ended, AuctionID, Winner, FinalPrice}
   end,
-  
+
   %% Unregister this process
   catch unregister(list_to_atom("auction_" ++ integer_to_list(AuctionID))),
-  
+
   %% Return final result (process terminates)
   {ended, #{
     auction_id => AuctionID,
@@ -241,7 +241,7 @@ handle_winner(State) ->
 get_server_time(AuctionID) ->
   get_server_time(AuctionID, node()).
 
-get_server_time(AuctionID, Node) ->  
+get_server_time(AuctionID, Node) ->
   AuctionName = list_to_atom("auction_" ++ integer_to_list(AuctionID)),
 
   {AuctionName, Node} ! {get_time, self()},
@@ -258,7 +258,7 @@ get_server_time(AuctionID, Node) ->
 sync_time(AuctionID) ->
   sync_time(AuctionID, node()).
 
-% sync with remote auction (across nodes)  
+% sync with remote auction (across nodes)
 sync_time(AuctionID, Node) ->
   AuctionName = list_to_atom("auction_" ++ integer_to_list(AuctionID)),
   T1 = erlang:system_time(millisecond),
@@ -268,8 +268,8 @@ sync_time(AuctionID, Node) ->
       T2 = erlang:system_time(millisecond),
       RTT = T2 - T1,
       Offset = ServerTime + (RTT div 2) - T2,
-      io:format("[TIME SYNC] Auction ~p@~p: RTT=~p ms, Offset=~p ms~n", 
-                [AuctionID, Node, RTT, Offset]),
+      io:format("[TIME SYNC] Auction ~p@~p: RTT=~p ms, Offset=~p ms~n",
+        [AuctionID, Node, RTT, Offset]),
       {ok, #{offset => Offset, rtt => RTT, server_time => ServerTime, node => Node}}
   after 5000 ->
     {error, timeout}
