@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.List;
 
 @RestController
@@ -39,5 +40,14 @@ public class UserController {
     public ResponseEntity<User> update(@PathVariable Long userId, @RequestBody User user) {
         User user1 = userService.update(userId, user);
         return ResponseEntity.ok(user1);
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<User> login(Principal principal) {
+        User user = userService.findByUserName(principal.getName());
+        if (user != null) {
+            return ResponseEntity.ok(user);
+        }
+        return ResponseEntity.notFound().build();
     }
 }

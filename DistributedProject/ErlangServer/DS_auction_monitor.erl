@@ -18,7 +18,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 %note that the private functions are not exported, helper and internal
 %CONFIGURATION
--define(JAVA_NODE, 'java_node@MSI').      %name of the Java Node to communicate
+-define(JAVA_NODE, 'java_node').      %name of the Java Node to communicate
 -define(JAVA_MAILBOX, 'java_listener').         %name of the Mailbox created in Java
 -define(POLL_INTERVAL, 5000).                   %how often to check for new auctions (ms)
 
