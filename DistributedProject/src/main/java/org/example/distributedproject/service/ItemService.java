@@ -62,6 +62,7 @@ public class ItemService {
             Item item = itemOpt.get();
             item.setStatus("ACTIVE");
             return itemRepository.save(item); // Ritorna l'oggetto aggiornato
+            //mettere che viene venduto quando finisce l'asta e back to pending if not sold
         }
         return null; // Nessun item disponibile
     }

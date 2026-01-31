@@ -22,6 +22,7 @@
 -define(JAVA_MAILBOX, 'java_listener').         %name of the Mailbox created in Java
 -define(POLL_INTERVAL, 5000).                   %how often to check for new auctions (ms)
 
+%TO:DO: modify the timing
 
 %structure of the internal state of the server.
 -record(state, {
@@ -144,7 +145,7 @@ start_auctions_batch([AuctionData | Rest], State) ->
   %% 1. Spawn the auction process
   %% We spawn a function that calls the handler's start function.
   %% IMPORTANT: Ensure DS_auction_handler:start/4 exists and matches arguments!
-  Pid = spawn(fun() -> 'DS_auction_handler':start(AuctionId, Price, Name, 60) end),
+  Pid = spawn(fun() -> 'DS_auction_handler':start(AuctionId, Price, Name, 300) end),
 
   %% 2. MONITOR the process
   %% This ensures we get a 'DOWN' message when it finishes or crashes.

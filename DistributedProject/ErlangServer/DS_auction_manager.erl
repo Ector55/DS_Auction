@@ -10,7 +10,6 @@
 -author("crazy").
 
 -behaviour(gen_server).
--include("macro.hrl").
 %made by gemini need to work on this
 
 %% API
