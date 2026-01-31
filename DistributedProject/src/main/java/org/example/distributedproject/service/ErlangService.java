@@ -17,7 +17,8 @@ public class ErlangService {
     private ItemService itemService;
     private OtpNode node;
     private OtpMbox mbox;
-    private final String erlangNodeName = "java_node"; //for now its modified
+    private final String erlangNodeName = "java_node@127.0.0.1";
+    private final String erlangServerNode = "auction_service@127.0.0.1";
     private final String cookie = "mypassword"; //MODIFY!!
 
     @PostConstruct
@@ -33,6 +34,7 @@ public class ErlangService {
         System.out.println("Sono partito bro");
         System.out.println(node);
         System.out.println(mbox.getName());
+        System.out.println("COOKIE JAVA: '" + node.cookie() + "'");
     }
     //sends a message to the chat at a specific auction
     public void sendChatMessage(int auctionId, String user, String message) {
@@ -43,7 +45,7 @@ public class ErlangService {
                     new OtpErlangString(user),
                     new OtpErlangString(message)
             };
-            mbox.send(chatProcessName, erlangNodeName, new OtpErlangTuple(msgPayload));
+            mbox.send(chatProcessName, erlangServerNode, new OtpErlangTuple(msgPayload));
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -125,6 +127,44 @@ public class ErlangService {
     @PreDestroy
     public void shutdown() {
         if (node != null) node.close();
+    }
+
+    public String placeBid(Long auctionId, String userId, Double amount) {
+        try {
+            // Il nome del processo asta in Erlang è registrato come "auction_ID"
+            String auctionProcessName = "auction_" + auctionId;
+
+            // Creiamo il messaggio: {self(), bid, UserId, Amount}
+            // self() viene aggiunto automaticamente da mbox.send() se usiamo send RPC style
+            // oppure dobbiamo inviare il nostro PID affinché Erlang possa rispondere.
+
+            OtpErlangObject[] payload = new OtpErlangObject[]{
+                    mbox.self(),                // ClientPid (Il PID della mailbox Java)
+                    new OtpErlangAtom("bid"),   // Atom 'bid'
+                    new OtpErlangString(userId),// UserId
+                    new OtpErlangDouble(amount) // Amount
+            };
+
+            OtpErlangTuple message = new OtpErlangTuple(payload);
+
+            // Invio al nodo Erlang specifico (definito nei passaggi precedenti)
+            mbox.send(auctionProcessName, erlangServerNode, message);
+
+            // Java aspetta la risposta dall'asta (es. {bid_accepted, ...} o {bid_rejected, ...})
+            // Timeout di 5 secondi
+            OtpErlangObject response = mbox.receive(5000);
+
+            if (response instanceof OtpErlangTuple) {
+                OtpErlangTuple respTuple = (OtpErlangTuple) response;
+                String status = respTuple.elementAt(0).toString(); // 'bid_accepted' o 'bid_rejected'
+                return status;
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "error_communication";
+        }
+        return "timeout";
     }
 
 }

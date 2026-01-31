@@ -5,6 +5,7 @@ import jakarta.transaction.Transactional;
 import org.example.distributedproject.model.Item;
 import org.example.distributedproject.repository.ItemRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import java.io.PrintWriter;
@@ -17,6 +18,10 @@ import java.util.Optional;
 public class ItemService {
     @Autowired
     private ItemRepository itemRepository;
+
+    @Autowired
+    @Lazy
+    private ErlangService erlangService;
 
     public List<Item> findAll(){
         List<Item> items = itemRepository.findAll();
@@ -46,20 +51,8 @@ public class ItemService {
     }
 
     public boolean placeBid(Long itemId, Double amount, String userId) {
-        String erlangHost = "localhost"; //65
-        int erlangPort = 9000;
-
-        try (Socket socket = new Socket(erlangHost, erlangPort)) {
-            PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-            String command = "BID:" + itemId + ":" + amount + ":" + userId;
-            out.println(command);
-            System.out.println(">> Command sent to Erlang: " + command);
-            return true;
-        } catch (Exception e) {
-            System.err.println("ERROR: It is not possible to contact the Erlang Server!");
-            e.printStackTrace();
-            return false;
-        }
+        String result = erlangService.placeBid(itemId, userId, amount);
+        return result.contains("bid_accepted");
     }
 
     @Transactional
