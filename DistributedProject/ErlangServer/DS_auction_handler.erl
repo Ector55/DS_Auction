@@ -45,7 +45,7 @@ start(AuctionID, StartingPrice, ItemName, Duration) ->
     server_start_time = erlang:system_time(millisecond)
   },
 
-  %% register this process so it can be found by auction ID
+%% Register the process locally so it can be reached by "auction_ID"
   register(list_to_atom("auction_" ++ integer_to_list(AuctionID)), self()),
 
   loop(InitialState).
