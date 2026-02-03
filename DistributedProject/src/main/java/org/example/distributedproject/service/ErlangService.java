@@ -3,40 +3,47 @@ package org.example.distributedproject.service;
 import com.ericsson.otp.erlang.*;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import org.example.distributedproject.model.Item;
+import org.example.distributedproject.model.Item; // Assicurati che questo model esista
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
-import java.io.IOException;
-import java.util.List;
 
+import java.io.IOException;
 
 @Service
 public class ErlangService {
 
     @Autowired
     private ItemService itemService;
+
+    private SimpMessagingTemplate messagingTemplate;
+
     private OtpNode node;
-    private OtpMbox mbox;
+    private OtpMbox mainMbox; // Mailbox principale per ricevere eventi asincroni (chat, richieste DB)
+
+    // Configurazione (Idealmente dovrebbero stare in application.properties)
     private final String erlangNodeName = "java_node@127.0.0.1";
     private final String erlangServerNode = "auction_service@127.0.0.1";
-    private final String cookie = "mypassword"; //MODIFY!!
+    private final String cookie = "mypassword";
 
     @PostConstruct
     public void init() throws IOException {
-        // Creates Java Node
+        // Crea il nodo Java
         node = new OtpNode(erlangNodeName, cookie);
-        // creates the mailbox with same name as macro Erlang (?JAVA_LISTENER)
-        mbox = node.createMbox("java_listener");
-        //starts the listening threads for incoming messages (modification or auction ending)
+
+        // Crea la mailbox principale "java_listener" nota a Erlang
+        mainMbox = node.createMbox("java_listener");
+
+        // Avvia il thread di ascolto continuo
         Thread listenerThread = new Thread(this::listen);
-        listenerThread.setDaemon(true);
+        listenerThread.setDaemon(true); // Si chiude se l'app muore
         listenerThread.start();
-        System.out.println("Sono partito bro");
-        System.out.println(node);
-        System.out.println(mbox.getName());
-        System.out.println("COOKIE JAVA: '" + node.cookie() + "'");
+
+        System.out.println("✅ Java Node Started: " + node.node());
+        System.out.println("✅ Cookie: " + node.cookie());
+        System.out.println("✅ Mailbox 'java_listener' ready.");
     }
-    //sends a message to the chat at a specific auction
+
     public void sendChatMessage(int auctionId, String user, String message) {
         try {
             String chatProcessName = "chat_" + auctionId;
@@ -45,126 +52,177 @@ public class ErlangService {
                     new OtpErlangString(user),
                     new OtpErlangString(message)
             };
-            mbox.send(chatProcessName, erlangServerNode, new OtpErlangTuple(msgPayload));
+            mainMbox.send(chatProcessName, erlangServerNode, new OtpErlangTuple(msgPayload));
         } catch (Exception e) {
-            e.printStackTrace();
+            System.err.println("❌ Errore invio chat: " + e.getMessage());
         }
     }
 
-    // In ErlangService.java
+    public String placeBid(Long auctionId, String userId, Double amount) {
+        OtpMbox tempMbox = null;
+        try {
+            // 1. Crea mailbox effimera solo per questa richiesta
+            tempMbox = node.createMbox();
+
+            String auctionProcessName = "auction_" + auctionId;
+
+            // Messaggio: {TempPid, bid, UserId, Amount}
+            // Erlang dovrà rispondere a TempPid (tempMbox.self())
+            OtpErlangObject[] payload = new OtpErlangObject[]{
+                    tempMbox.self(),
+                    new OtpErlangAtom("bid"),
+                    new OtpErlangString(userId),
+                    new OtpErlangDouble(amount)
+            };
+
+            // Invia
+            tempMbox.send(auctionProcessName, erlangServerNode, new OtpErlangTuple(payload));
+
+            // 2. Attende risposta SOLO su questa mailbox (Timeout 5s)
+            OtpErlangObject response = tempMbox.receive(5000);
+
+            if (response instanceof OtpErlangTuple respTuple) {
+                // Aspettiamo {status, ...} es: {bid_accepted, NewPrice} o {bid_rejected, Reason}
+                // Ritorniamo il primo elemento come stringa (status)
+                return respTuple.elementAt(0).toString();
+            }
+
+        } catch (Exception e) {
+            System.err.println("❌ Errore placeBid: " + e.getMessage());
+            return "error_communication";
+        } finally {
+            // 3. Importante: distruggere la mailbox temporanea
+            if (tempMbox != null) {
+                node.closeMbox(tempMbox);
+            }
+        }
+        return "timeout";
+    }
 
     private void listen() {
-        while (true) {
+        while (!Thread.currentThread().isInterrupted()) {
             try {
-                OtpErlangObject msg = mbox.receive();
-                if (msg instanceof OtpErlangTuple) {
-                    OtpErlangTuple tuple = (OtpErlangTuple) msg;
+                // Bloccante: aspetta messaggi su 'java_listener'
+                OtpErlangObject msg = mainMbox.receive();
 
-                    // Erlang invia: {SenderPid, MsgId, get_next_auctions, Count}
-                    // La tupla ha 4 elementi.
-                    if (tuple.arity() == 4) {
-                        OtpErlangObject term3 = tuple.elementAt(2); // L'atomo del comando
+                if (msg instanceof OtpErlangTuple tuple) {
 
-                        if (term3 instanceof OtpErlangAtom && ((OtpErlangAtom) term3).atomValue().equals("get_next_auctions")) {
-                            handleGetNextAuctions(tuple);
-                        }
-                    } else {
-                        // Gestione altri messaggi (es. chat)
-                        System.out.println("Messaggio generico ricevuto: " + tuple);
+                    // --- CASO A: Richiesta Item dal DB ---
+                    // Pattern: {SenderPid, MsgId, get_next_auctions, Count}
+                    if (tuple.arity() == 4 && isAtom(tuple.elementAt(2), "get_next_auctions")) {
+                        handleGetNextAuctions(tuple);
+                    }
+
+                    // --- CASO B: Messaggio Chat in arrivo (Broadcast) ---
+                    // Pattern ipotetico Erlang: {chat_msg, AuctionId, User, Text}
+                    else if (tuple.arity() == 4 && isAtom(tuple.elementAt(0), "chat_msg")) {
+                        handleIncomingChatMessage(tuple);
+                    }
+
+                    else {
+                        System.out.println("⚠️ Messaggio Erlang ignorato (pattern non riconosciuto): " + tuple);
                     }
                 }
+            } catch (OtpErlangExit e) {
+                System.err.println("❌ Processo Erlang terminato o connessione persa.");
+                break; // Usciamo dal loop se la connessione è rotta
             } catch (Exception e) {
-                System.err.println("Error receiving Erlang: " + e.getMessage());
+                System.err.println("❌ Errore generico nel listener: " + e.getMessage());
             }
         }
     }
 
     private void handleGetNextAuctions(OtpErlangTuple tuple) {
         try {
-            // 1. Estrai ID messaggio e PID
             OtpErlangPid senderPid = (OtpErlangPid) tuple.elementAt(0);
             OtpErlangRef msgId = (OtpErlangRef) tuple.elementAt(1);
 
-            System.out.println("Richiesta 'get_next_auctions' ricevuta.");
+            System.out.println("📥 Richiesta DB ricevuta da Erlang.");
 
-            // 2. Chiama il service (Transazionale)
-            // Nota: Assicurati di aver iniettato il service: @Autowired private ItemService itemService;
+            // Chiama il service DB
             Item item = itemService.activateAndGetNextItem();
 
             OtpErlangList auctionList;
-
             if (item != null) {
-                // Trovato! Convertiamolo in Tupla Erlang: {Id, Name, Price}
+                // Crea tupla {Id, Name, Price}
                 OtpErlangTuple itemTuple = new OtpErlangTuple(new OtpErlangObject[]{
-                        new OtpErlangLong(item.getId()),        // ID
-                        new OtpErlangString(item.getName()),    // Nome
-                        new OtpErlangDouble(item.getStartingPrice()) // Prezzo (Double per sicurezza)
+                        new OtpErlangLong(item.getId()),
+                        new OtpErlangString(item.getName()),
+                        new OtpErlangDouble(item.getStartingPrice())
                 });
-
-                // Mettilo dentro una lista (Erlang si aspetta una lista di aste)
+                // Mette in lista
                 auctionList = new OtpErlangList(new OtpErlangObject[]{ itemTuple });
-                System.out.println("Attivato item ID: " + item.getId());
+                System.out.println("✅ Item trovato: " + item.getName());
             } else {
-                // Nessun item trovato: Mandiamo una lista vuota []
+                // Lista vuota
                 auctionList = new OtpErlangList();
-                System.out.println("Nessun item PENDING trovato.");
+                System.out.println("⚠️ Nessun item disponibile.");
             }
 
-            // 3. Rispondi a Erlang: {MsgId, java_response, AuctionList}
+            // Risposta: {MsgId, java_response, AuctionList}
             OtpErlangTuple response = new OtpErlangTuple(new OtpErlangObject[]{
                     msgId,
                     new OtpErlangAtom("java_response"),
                     auctionList
             });
 
-            mbox.send(senderPid, response);
+            mainMbox.send(senderPid, response);
 
         } catch (Exception e) {
             e.printStackTrace();
         }
+    }
+
+    private void handleIncomingChatMessage(OtpErlangTuple tuple) {
+        // tuple: {chat_msg, AuctionId, User, Text}
+        try {
+            // Convertiamo gli oggetti Erlang in Java String sicure
+            String auctionId = tuple.elementAt(1).toString(); // ID numerico o stringa
+            String user = extractString(tuple.elementAt(2));
+            String text = extractString(tuple.elementAt(3));
+
+            System.out.println("💬 CHAT RX [" + auctionId + "] " + user + ": " + text);
+
+            // Invia al Frontend via WebSocket
+            // Assumiamo che il client sia sottoscritto a: /topic/auction/{id}
+            String destination = "/topic/auction/" + auctionId;
+
+            // Creiamo un oggetto semplice per il JSON (puoi usare una classe dedicata DTO)
+            ChatMessageDto msgDto = new ChatMessageDto(user, text);
+
+            messagingTemplate.convertAndSend(destination, msgDto);
+
+        } catch (Exception e) {
+            System.err.println("❌ Errore parsing messaggio chat: " + e.getMessage());
+        }
+    }
+
+    // Utility per controllare gli atomi
+    private boolean isAtom(OtpErlangObject obj, String val) {
+        return obj instanceof OtpErlangAtom atom && atom.atomValue().equals(val);
+    }
+
+    // Utility CRUCIALE: Erlang invia stringhe come Binary o List, dobbiamo gestire entrambi
+    private String extractString(OtpErlangObject obj) {
+        if (obj instanceof OtpErlangString) {
+            return ((OtpErlangString) obj).stringValue();
+        } else if (obj instanceof OtpErlangBinary) {
+            return new String(((OtpErlangBinary) obj).binaryValue());
+        } else if (obj instanceof OtpErlangAtom) {
+            return ((OtpErlangAtom) obj).atomValue();
+        }
+        return obj.toString(); // Fallback
     }
 
     @PreDestroy
     public void shutdown() {
-        if (node != null) node.close();
-    }
-
-    public String placeBid(Long auctionId, String userId, Double amount) {
-        try {
-            // Il nome del processo asta in Erlang è registrato come "auction_ID"
-            String auctionProcessName = "auction_" + auctionId;
-
-            // Creiamo il messaggio: {self(), bid, UserId, Amount}
-            // self() viene aggiunto automaticamente da mbox.send() se usiamo send RPC style
-            // oppure dobbiamo inviare il nostro PID affinché Erlang possa rispondere.
-
-            OtpErlangObject[] payload = new OtpErlangObject[]{
-                    mbox.self(),                // ClientPid (Il PID della mailbox Java)
-                    new OtpErlangAtom("bid"),   // Atom 'bid'
-                    new OtpErlangString(userId),// UserId
-                    new OtpErlangDouble(amount) // Amount
-            };
-
-            OtpErlangTuple message = new OtpErlangTuple(payload);
-
-            // Invio al nodo Erlang specifico (definito nei passaggi precedenti)
-            mbox.send(auctionProcessName, erlangServerNode, message);
-
-            // Java aspetta la risposta dall'asta (es. {bid_accepted, ...} o {bid_rejected, ...})
-            // Timeout di 5 secondi
-            OtpErlangObject response = mbox.receive(5000);
-
-            if (response instanceof OtpErlangTuple) {
-                OtpErlangTuple respTuple = (OtpErlangTuple) response;
-                String status = respTuple.elementAt(0).toString(); // 'bid_accepted' o 'bid_rejected'
-                return status;
-            }
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            return "error_communication";
+        if (node != null) {
+            node.close();
+            System.out.println("🛑 Java Node Closed.");
         }
-        return "timeout";
     }
 
+    public record ChatMessageDto(String user, String message) {
+
+    }
 }
