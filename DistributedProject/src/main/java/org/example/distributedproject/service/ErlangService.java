@@ -99,38 +99,57 @@ public class ErlangService {
         return "timeout";
     }
 
+    // ... (tutto il resto del codice rimane uguale)
+
     private void listen() {
         while (!Thread.currentThread().isInterrupted()) {
             try {
-                // Bloccante: aspetta messaggi su 'java_listener'
                 OtpErlangObject msg = mainMbox.receive();
 
                 if (msg instanceof OtpErlangTuple tuple) {
-
-                    // --- CASO A: Richiesta Item dal DB ---
-                    // Pattern: {SenderPid, MsgId, get_next_auctions, Count}
                     if (tuple.arity() == 4 && isAtom(tuple.elementAt(2), "get_next_auctions")) {
                         handleGetNextAuctions(tuple);
                     }
-
-                    // --- CASO B: Messaggio Chat in arrivo (Broadcast) ---
-                    // Pattern ipotetico Erlang: {chat_msg, AuctionId, User, Text}
                     else if (tuple.arity() == 4 && isAtom(tuple.elementAt(0), "chat_msg")) {
                         handleIncomingChatMessage(tuple);
                     }
-
+                    // Richiama il metodo che implementiamo qui sotto
+                    else if (tuple.arity() == 4 && isAtom(tuple.elementAt(0), "auction_closed")) {
+                        handleAuctionClosed(tuple);
+                    }
                     else {
-                        System.out.println("⚠️ Messaggio Erlang ignorato (pattern non riconosciuto): " + tuple);
+                        System.out.println("⚠️ Messaggio Erlang ignorato: " + tuple);
                     }
                 }
             } catch (OtpErlangExit e) {
-                System.err.println("❌ Processo Erlang terminato o connessione persa.");
-                break; // Usciamo dal loop se la connessione è rotta
+                System.err.println("❌ Processo Erlang terminato.");
+                break;
             } catch (Exception e) {
-                System.err.println("❌ Errore generico nel listener: " + e.getMessage());
+                System.err.println("❌ Errore nel listener: " + e.getMessage());
             }
         }
     }
+
+    // AGGIUNGI QUESTO METODO MANCANTE
+    private void handleAuctionClosed(OtpErlangTuple tuple) {
+        try {
+            // Estrae dati da: {auction_closed, AuctionId, Winner, Price}
+            Long auctionId = ((OtpErlangLong) tuple.elementAt(1)).longValue();
+            String winner = extractString(tuple.elementAt(2));
+            Double price = ((OtpErlangDouble) tuple.elementAt(3)).doubleValue();
+
+            System.out.println("📥 Notifica chiusura asta " + auctionId + ". Vincitore: " + winner);
+
+            // Chiama il service per aggiornare lo stato nel DB a SOLD
+            itemService.closeItem(auctionId, winner, price);
+
+        } catch (Exception e) {
+            System.err.println("❌ Errore nel processare auction_closed: " + e.getMessage());
+        }
+    }
+
+// ... (handleGetNextAuctions e le altre utility rimangono uguali)
+
 
     private void handleGetNextAuctions(OtpErlangTuple tuple) {
         try {

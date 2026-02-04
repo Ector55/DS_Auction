@@ -67,4 +67,15 @@ public class ItemService {
         return null; // Nessun item disponibile
     }
 
+    @Transactional
+    public void closeItem(Long itemId, String winner, Double price) {
+        Item item = itemRepository.findById(itemId).orElse(null);
+        if (item != null) {
+            item.setStatus("SOLD"); // Cambiando in SOLD, activateAndGetNextItem non lo riprenderà
+            // Opzionale: salva il vincitore e il prezzo se hai i campi nel model Item
+            itemRepository.save(item);
+            System.out.println("✅ Item " + itemId + " segnato come SOLD nel DB.");
+        }
+    }
+
 }

@@ -190,7 +190,8 @@ handle_winner(State) ->
   FinalPrice = State#state.current_bid,
   ItemName = State#state.item_name,
 
-  case Winner of
+  JavaWinner = if Winner == none -> "no_winner"; true -> Winner end,
+  {java_listener, 'java_node@127.0.0.1'} ! {auction_closed, AuctionID, JavaWinner, FinalPrice},  case Winner of
     none ->
       io:format("~n========================================~n"),
       io:format("[AUCTION ~p] ENDED - NO BIDS~n", [AuctionID]),
@@ -208,10 +209,8 @@ handle_winner(State) ->
 
   %% Notify manager that auction ended
   case whereis('DS_auction_manager') of
-    undefined ->
-      ok;
-    ManagerPid ->
-      ManagerPid ! {auction_ended, AuctionID, Winner, FinalPrice}
+    undefined -> ok;
+    ManagerPid -> ManagerPid ! {auction_ended, AuctionID, Winner, FinalPrice}
   end,
 
   %% Unregister this process
