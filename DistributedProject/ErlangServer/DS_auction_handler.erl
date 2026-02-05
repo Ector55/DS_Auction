@@ -191,6 +191,13 @@ handle_winner(State) ->
   ItemName = State#state.item_name,
 
   JavaWinner = if Winner == none -> "no_winner"; true -> Winner end,
+  %% Identify and stop the associated chat process
+  ChatName = list_to_atom("chat_" ++ integer_to_list(AuctionID)),
+  case whereis(ChatName) of
+    undefined -> ok;
+    ChatPid -> ChatPid ! stop
+  end,
+
   {java_listener, 'java_node@127.0.0.1'} ! {auction_closed, AuctionID, JavaWinner, FinalPrice},  case Winner of
     none ->
       io:format("~n========================================~n"),
