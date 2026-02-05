@@ -37,6 +37,18 @@ public class AuctionController {
         }
     }
 
+
+    @PostMapping("/{itemId}/bid")
+    public ResponseEntity<String> bid(@PathVariable Long itemId,@RequestParam String userId, @RequestParam Double amount) {
+        boolean success = Boolean.parseBoolean(erlangService.placeBid(itemId, userId, amount));
+        if (success) {
+            return ResponseEntity.ok("Offer sent to the handler!");
+        } else {
+            return ResponseEntity.status(500).body("Error while connecting to the Auction.");
+        }
+    }
+
+
   //Endpoint to handle sending chat messages within a specific auction.
     @PostMapping("/{id}/chat")
     public ResponseEntity<?> postChatMessage(@PathVariable int id, @RequestParam String message) {
