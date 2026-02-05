@@ -68,9 +68,9 @@ public class ErlangService {
     public String placeBid(Long auctionId, Double amount) {
         OtpMbox tempMbox = null;
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        User user = (User) auth.getPrincipal();
+        String username = auth.getName();
+        User user = userService.findByUserName(username);
         Long userId = user.getId();
-
         try {
             tempMbox = node.createMbox();
             String auctionProcessName = "auction_" + auctionId;
@@ -78,7 +78,7 @@ public class ErlangService {
             OtpErlangObject[] payload = new OtpErlangObject[]{
                     tempMbox.self(),
                     new OtpErlangAtom("bid"),
-                    new OtpErlangString(String.valueOf(userId)),
+                    new OtpErlangLong(userId),
                     new OtpErlangDouble(amount)
             };
 

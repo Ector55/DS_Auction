@@ -49,7 +49,7 @@ public class ItemService {
         itemEsistente.setDescription(itemEntrata.getDescription());
         return itemRepository.save(itemEsistente);
     }
-    
+
 
     @Transactional
     public Item activateAndGetNextItem() {
