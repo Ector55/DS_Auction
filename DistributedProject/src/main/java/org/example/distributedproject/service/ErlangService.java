@@ -4,8 +4,11 @@ import com.ericsson.otp.erlang.*;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.example.distributedproject.model.Item;
+import org.example.distributedproject.model.User;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -15,6 +18,9 @@ public class ErlangService {
 
     @Autowired
     private ItemService itemService;
+
+    @Autowired
+    private UserService userService;
 
     @Autowired
     private SimpMessagingTemplate messagingTemplate;
@@ -59,8 +65,12 @@ public class ErlangService {
     /**
      * Handles Bid requests from the Web Frontend.
      */
-    public String placeBid(Long auctionId, String userId, Double amount) {
+    public String placeBid(Long auctionId, Double amount) {
         OtpMbox tempMbox = null;
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        User user = (User) auth.getPrincipal();
+        Long userId = user.getId();
+
         try {
             tempMbox = node.createMbox();
             String auctionProcessName = "auction_" + auctionId;
@@ -68,7 +78,7 @@ public class ErlangService {
             OtpErlangObject[] payload = new OtpErlangObject[]{
                     tempMbox.self(),
                     new OtpErlangAtom("bid"),
-                    new OtpErlangString(userId),
+                    new OtpErlangString(String.valueOf(userId)),
                     new OtpErlangDouble(amount)
             };
 

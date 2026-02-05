@@ -49,11 +49,7 @@ public class ItemService {
         itemEsistente.setDescription(itemEntrata.getDescription());
         return itemRepository.save(itemEsistente);
     }
-
-    public boolean placeBid(Long itemId, Double amount, String userId) {
-        String result = erlangService.placeBid(itemId, userId, amount);
-        return result.contains("bid_accepted");
-    }
+    
 
     @Transactional
     public Item activateAndGetNextItem() {

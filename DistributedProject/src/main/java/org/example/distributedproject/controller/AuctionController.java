@@ -39,13 +39,9 @@ public class AuctionController {
 
 
     @PostMapping("/{itemId}/bid")
-    public ResponseEntity<String> bid(@PathVariable Long itemId,@RequestParam String userId, @RequestParam Double amount) {
-        boolean success = Boolean.parseBoolean(erlangService.placeBid(itemId, userId, amount));
-        if (success) {
-            return ResponseEntity.ok("Offer sent to the handler!");
-        } else {
-            return ResponseEntity.status(500).body("Error while connecting to the Auction.");
-        }
+    public ResponseEntity<String> bid(@PathVariable Long itemId, @RequestParam Double amount) {
+       erlangService.placeBid(itemId, amount);
+       return ResponseEntity.ok("Offer sent to the handler!");
     }
 
 
