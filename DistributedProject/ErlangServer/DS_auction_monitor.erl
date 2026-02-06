@@ -50,17 +50,19 @@ handle_cast(_Msg, State) ->
   {noreply, State}.
 
 %% Automatically called when a monitored process exits
-%% Handles the signal 'DOWN' when a monitored process ends or crashes
-handle_info({'DOWN', Ref, process, _Pid, Reason}, State) ->
-  %% Use _TargetPid (or just _) instead of _Pid to avoid the shadowing warning
+handle_info({'DOWN', Ref, process, Pid, Reason}, State) ->
   case maps:find(Ref, State#state.monitored_auctions) of
-    {ok, {_TargetPid, AuctionId}} ->
-      case Reason of
-        normal ->
-          io:format("[MONITOR] Auction ~p finished normally.~n", [AuctionId]);
-        _Other ->
-          io:format("[MONITOR] ALERT: Auction ~p crashed! Reason: ~p~n", [AuctionId, Reason])
+    {ok, {Pid, AuctionId}} ->
+      %% 1. Log the event
+      io:format("[MONITOR] Auction ~p (Pid ~p) exited. Reason: ~p~n", [AuctionId, Pid, Reason]),
+
+      %% 2. IMPORTANT: Notify the Manager so it can free the slot!
+      %% We send the exact same 'DOWN' format the manager expects
+      case whereis('DS_auction_manager') of
+        undefined -> ok;
+        ManagerPid -> ManagerPid ! {'DOWN', Ref, process, Pid, Reason}
       end,
+
       NewMap = maps:remove(Ref, State#state.monitored_auctions),
       {noreply, State#state{monitored_auctions = NewMap}};
     error ->

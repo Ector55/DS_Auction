@@ -184,53 +184,55 @@ handle_bid(State, ClientPid, UserId, Amount) ->
 
 %% handle Winner , when auction timer reaches 0
 
+%% Handle Winner - called when the auction timer reaches 0
 handle_winner(State) ->
   AuctionID = State#state.auction_id,
   Winner = State#state.high_bidder,
   FinalPrice = State#state.current_bid,
   ItemName = State#state.item_name,
 
+  %% Format winner for Java compatibility
   JavaWinner = if Winner == none -> "no_winner"; true -> Winner end,
-  %% Identify and stop the associated chat process
+
+  %% 1. Identify and stop the associated chat process
   ChatName = list_to_atom("chat_" ++ integer_to_list(AuctionID)),
   case whereis(ChatName) of
     undefined -> ok;
     ChatPid -> ChatPid ! stop
   end,
 
-  {java_listener, 'java_node@127.0.0.1'} ! {auction_closed, AuctionID, JavaWinner, FinalPrice},  case Winner of
+  %% 2. Notify the Java listener about the auction results
+  {java_listener, 'java_node@127.0.0.1'} ! {auction_closed, AuctionID, JavaWinner, FinalPrice},
+
+  %% 3. Print auction summary to the console
+  io:format("~n========================================~n"),
+  case Winner of
     none ->
-      io:format("~n========================================~n"),
       io:format("[AUCTION ~p] ENDED - NO BIDS~n", [AuctionID]),
-      io:format("Item '~s' received no bids.~n", [ItemName]),
-      io:format("========================================~n~n");
+      io:format("Item '~s' received no bids.~n", [ItemName]);
     _ ->
-      io:format("~n========================================~n"),
       io:format("[AUCTION ~p] ENDED - SOLD!~n", [AuctionID]),
       io:format("Item: '~s'~n", [ItemName]),
       io:format("Winner: User ~p~n", [Winner]),
       io:format("Final Price: ~p~n", [FinalPrice]),
-      io:format("Total Bids: ~p~n", [length(State#state.bids_history)]),
-      io:format("========================================~n~n")
+      io:format("Total Bids: ~p~n", [length(State#state.bids_history)])
   end,
+  io:format("========================================~n~n"),
 
-  %% Notify manager that auction ended
+  %% 4. Notify the Manager that the auction logic is finished
   case whereis('DS_auction_manager') of
     undefined -> ok;
     ManagerPid -> ManagerPid ! {auction_ended, AuctionID, Winner, FinalPrice}
   end,
 
-  %% Unregister this process
+  %% 5. Unregister the process name to allow reuse of the ID later
   catch unregister(list_to_atom("auction_" ++ integer_to_list(AuctionID))),
 
-  %% Return final result (process terminates)
-  {ended, #{
-    auction_id => AuctionID,
-    winner => Winner,
-    final_price => FinalPrice,
-    item_name => ItemName,
-    total_bids => length(State#state.bids_history)
-  }}.
+  %% 6. TERMINATE the process
+  %% This triggers the 'DOWN' message in DS_auction_manager,
+  %% which immediately triggers the request for new auctions.
+  io:format("[AUCTION ~p] Cleaning up process and freeing slot...~n", [AuctionID]),
+  exit(normal).
 
 
 %% CRISTIAN'S ALGORITHM - Time Synchronization

@@ -62,16 +62,22 @@ handle_info(check_for_auctions, State) ->
       {noreply, State}
   end;
 
-%% Handles the termination of an auction process via Erlang monitors
-handle_info({'DOWN', _Ref, process, Pid, Reason}, State) ->
-  ActiveSlots = State#state.active_slots,
+handle_info({auction_ended, AuctionId, _Winner, _Price}, State) ->
+  io:format("[MANAGER] Auction ~p notified end. Waiting for process cleanup...~n", [AuctionId]),
+  {noreply, State};
 
+%% This handles the ACTUAL slot liberation
+handle_info({'DOWN', _Ref, process, Pid, _Reason}, State) ->
+  ActiveSlots = State#state.active_slots,
   case maps:find(Pid, ActiveSlots) of
     {ok, AuctionId} ->
-      io:format("[MANAGER] Auction ~p ended/crashed via ~p. Slot freed.~n", [AuctionId, Reason]),
+      io:format("[MANAGER] Freeing slot for Auction ~p. Requesting new item...~n", [AuctionId]),
       NewSlots = maps:remove(Pid, ActiveSlots),
-      {noreply, State#state{active_slots = NewSlots}};
 
+      %% This triggers the immediate fetch from Java
+      self() ! check_for_auctions,
+
+      {noreply, State#state{active_slots = NewSlots}};
     error ->
       {noreply, State}
   end;
@@ -115,7 +121,7 @@ start_auctions_batch([AuctionData | Rest], State) ->
   io:format("[MANAGER] Spawning Auction and Chat: ID=~p, Item=~s~n", [AuctionId, Name]),
 
   %% 1. Spawn the auction logic process
-  Pid = spawn(fun() -> 'DS_auction_handler':start(AuctionId, Price, Name, 300) end),
+  Pid = spawn(fun() -> 'DS_auction_handler':start(AuctionId, Price, Name, 30) end),
 
   %% 2. Spawn the chat process for this specific auction
   spawn(fun() -> chat_handler:start(AuctionId) end),
