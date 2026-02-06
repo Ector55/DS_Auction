@@ -137,7 +137,7 @@ public class ErlangService {
     private void handleNewBid(OtpErlangTuple tuple) {
         try {
             // {new_bid, AuctionId, NewPrice, BidderName}
-            Long auctionId = extractLong(tuple.elementAt(1));
+            String auctionId = tuple.elementAt(1).toString();
             Double price = extractDouble(tuple.elementAt(2));
             String userId = extractString(tuple.elementAt(3));
 
@@ -151,13 +151,13 @@ public class ErlangService {
 
     private void handleBidRejected(OtpErlangTuple tuple) {
         try {
-            Long auctionId = extractLong(tuple.elementAt(1));
-            Long userId = extractLong(tuple.elementAt(2)); // Identifica l'utente specifico
+            String auctionId = tuple.elementAt(1).toString();
+            String user = extractString(tuple.elementAt(2));
             String reason = extractString(tuple.elementAt(3));
 
-            System.err.println("Bid rejected for User " + userId + " on Auction " + auctionId + ": " + reason);
+            System.err.println("Bid rejected for User " + user + " on Auction " + auctionId + ": " + reason);
             messagingTemplate.convertAndSend("/topic/auction/" + auctionId + "/errors",
-                    "Bid rejected for user " + userId + ": " + reason.replace("_", " "));
+                    "Bid rejected for user " + user + ": " + reason.replace("_", " "));
 
         } catch (Exception e) {
             System.err.println("Error handling bid_rejected: " + e.getMessage());
