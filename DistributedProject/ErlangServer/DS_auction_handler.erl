@@ -16,6 +16,8 @@
 %% time synchronization api(Cristian's algortihm)
 -export([get_server_time/1, get_server_time/2, sync_time/1, sync_time/2]).
 
+-define(JAVA_NODE, 'java_node@127.0.0.1').
+-define(JAVA_MAILBOX, 'java_listener').
 %% State record
 -record(state, {
   auction_id,
@@ -117,39 +119,46 @@ loop(State) ->
 
 %% Handle Bid - Validates and processes a bid
 
+%% Handle Bid - Validates and processes a bid
 handle_bid(State, ClientPid, UserId, Amount) ->
   AuctionID = State#state.auction_id,
   CurrentBid = State#state.current_bid,
   HighBidder = State#state.high_bidder,
   TimeRemaining = State#state.time_remaining,
 
-
   if
-  %% Check if auction is still ongoing
+  %% Case 1: Auction ended
     TimeRemaining =< 0 ->
       io:format("[AUCTION ~p] Bid rejected: auction ended~n", [AuctionID]),
+      %% Notify Java of the rejection
+      {java_listener, 'java_node@127.0.0.1'} ! {bid_rejected, AuctionID, UserId, auction_ended},
       ClientPid ! {bid_rejected, auction_ended},
       State;
 
-  %% Check if bid is higher than current price
+  %% Case 2: Bid too low
     Amount =< CurrentBid ->
       io:format("[AUCTION ~p] Bid rejected: ~p not higher than ~p~n",
         [AuctionID, Amount, CurrentBid]),
+      %% Notify Java of the rejection
+      {java_listener, 'java_node@127.0.0.1'} ! {bid_rejected, AuctionID, UserId, bid_too_low},
       ClientPid ! {bid_rejected, bid_too_low},
       State;
 
-  %% Check so that there are no consecutive bids)
+  %% Case 3: Consecutive bids from the same user
     UserId =:= HighBidder ->
       io:format("[AUCTION ~p] Bid rejected: user ~p cannot bid consecutively~n",
         [AuctionID, UserId]),
+      %% Notify Java of the rejection
+      {java_listener, 'java_node@127.0.0.1'} ! {bid_rejected, AuctionID, UserId, consecutive_bid},
       ClientPid ! {bid_rejected, consecutive_bid_not_allowed},
       State;
-
-  %% if all checks passed - accept the bid
+  %% Case 4: Bid ACCEPTED
     true ->
       io:format("[AUCTION ~p] Bid ACCEPTED: ~p by user ~p~n",
         [AuctionID, Amount, UserId]),
 
+      %% Notify Java of the successful bid
+      {java_listener, 'java_node@127.0.0.1'} ! {new_bid, AuctionID, Amount, UserId},
       %% Record bid in history
       Timestamp = erlang:system_time(second),
       BidRecord = #{
@@ -159,7 +168,7 @@ handle_bid(State, ClientPid, UserId, Amount) ->
       },
       NewHistory = [BidRecord | State#state.bids_history],
 
-      %% Check if we need to extend time (bid in last 10 seconds)
+      %% Check if we need to extend time
       ExtendThreshold = State#state.extend_threshold,
       NewTime = if
                   TimeRemaining =< ExtendThreshold ->
@@ -169,7 +178,7 @@ handle_bid(State, ClientPid, UserId, Amount) ->
                     TimeRemaining
                 end,
 
-      %% Send success response to bidder
+      %% Send success response to local Erlang bidder
       ClientPid ! {bid_accepted, Amount, NewTime},
 
       %% Return updated state

@@ -71,6 +71,7 @@ public class ErlangService {
         String username = auth.getName();
         User user = userService.findByUserName(username);
         Long userId = user.getId();
+
         try {
             tempMbox = node.createMbox();
             String auctionProcessName = "auction_" + auctionId;
@@ -81,19 +82,25 @@ public class ErlangService {
                     new OtpErlangLong(userId),
                     new OtpErlangDouble(amount)
             };
-
             tempMbox.send(auctionProcessName, erlangServerNode, new OtpErlangTuple(payload));
             OtpErlangObject response = tempMbox.receive(5000);
 
             if (response instanceof OtpErlangTuple respTuple) {
-                return respTuple.elementAt(0).toString(); // e.g., "bid_accepted"
+                String status = ((OtpErlangAtom) respTuple.elementAt(0)).atomValue();
+
+                if ("bid_accepted".equals(status)) {
+                    return "SUCCESS: Bid accepted.";
+                } else if ("bid_rejected".equals(status)) {
+                    String reason = ((OtpErlangAtom) respTuple.elementAt(1)).atomValue();
+                    return "ERROR: " + reason.replace("_", " ");
+                }
             }
+            return "ERROR: Invalid response from auction server.";
         } catch (Exception e) {
-            return "error_communication";
+            return "ERROR: Connection lost or timeout.";
         } finally {
             if (tempMbox != null) node.closeMbox(tempMbox);
         }
-        return "timeout";
     }
 
     private void listen() {
@@ -113,12 +120,50 @@ public class ErlangService {
                     else if (isAtom(tuple.elementAt(0), "auction_closed")) {
                         handleAuctionClosed(tuple);
                     }
+                    else if (isAtom(tuple.elementAt(0), "new_bid")) {
+                        handleNewBid(tuple);
+                    }
+
+                    else if (isAtom(tuple.elementAt(0), "bid_rejected")){
+                        handleBidRejected(tuple);
+                    }
                 }
             } catch (Exception e) {
                 System.err.println("Listener Error: " + e.getMessage());
             }
         }
     }
+
+    private void handleNewBid(OtpErlangTuple tuple) {
+        try {
+            // {new_bid, AuctionId, NewPrice, BidderName}
+            Long auctionId = extractLong(tuple.elementAt(1));
+            Double price = extractDouble(tuple.elementAt(2));
+            String userId = extractString(tuple.elementAt(3));
+
+            messagingTemplate.convertAndSend("/topic/auction/" + auctionId + "/updates",
+                    new BidUpdateDto(price, userId));
+            System.out.println("New Bid for Auction [" + auctionId + "] - Bidder: " + userId + ", Amount: " + price);
+        } catch (Exception e) {
+            System.err.println("Error handling new_bid: " + e.getMessage());
+        }
+    }
+
+    private void handleBidRejected(OtpErlangTuple tuple) {
+        try {
+            Long auctionId = extractLong(tuple.elementAt(1));
+            Long userId = extractLong(tuple.elementAt(2)); // Identifica l'utente specifico
+            String reason = extractString(tuple.elementAt(3));
+
+            System.err.println("Bid rejected for User " + userId + " on Auction " + auctionId + ": " + reason);
+            messagingTemplate.convertAndSend("/topic/auction/" + auctionId + "/errors",
+                    "Bid rejected for user " + userId + ": " + reason.replace("_", " "));
+
+        } catch (Exception e) {
+            System.err.println("Error handling bid_rejected: " + e.getMessage());
+        }
+    }
+
 
     private void handleIncomingChatMessage(OtpErlangTuple tuple) {
         try {
@@ -129,7 +174,6 @@ public class ErlangService {
 
             System.out.println("Chat from Erlang [" + auctionId + "] " + user + ": " + text);
 
-            // Push to Web Frontend via WebSocket
             messagingTemplate.convertAndSend("/topic/auction/" + auctionId, new ChatMessageDto(user, text));
         } catch (Exception e) {
             System.err.println("Error parsing chat msg: " + e.getMessage());
@@ -156,6 +200,7 @@ public class ErlangService {
             OtpErlangRef msgId = (OtpErlangRef) tuple.elementAt(1);
 
             Item item = itemService.activateAndGetNextItem();
+            System.out.println("+++ [ACTIVATING] Manager requested next item. Starting Auction #" + item.getId() + " (" + item.getName() + ")");
             OtpErlangList auctionList = (item != null) ?
                     new OtpErlangList(new OtpErlangTuple(new OtpErlangObject[]{
                             new OtpErlangLong(item.getId()), new OtpErlangString(item.getName()), new OtpErlangDouble(item.getStartingPrice())
@@ -178,10 +223,24 @@ public class ErlangService {
         return obj.toString();
     }
 
+    private Double extractDouble(OtpErlangObject obj) {
+        if (obj instanceof OtpErlangDouble d) return d.doubleValue();
+        if (obj instanceof OtpErlangLong l) return (double) l.longValue();
+        return 0.0;
+    }
+
+    private Long extractLong(OtpErlangObject obj) {
+        if (obj instanceof OtpErlangLong l) return l.longValue();
+        if (obj instanceof OtpErlangDouble d) return (long) d.doubleValue();
+        return 0L;
+    }
+
     @PreDestroy
     public void shutdown() {
         if (node != null) node.close();
     }
 
     public record ChatMessageDto(String user, String message) {}
+    public record BidUpdateDto(Double price, String bidder) {}
+
 }

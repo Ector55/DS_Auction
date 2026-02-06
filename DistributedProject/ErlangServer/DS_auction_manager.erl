@@ -121,7 +121,7 @@ start_auctions_batch([AuctionData | Rest], State) ->
   io:format("[MANAGER] Spawning Auction and Chat: ID=~p, Item=~s~n", [AuctionId, Name]),
 
   %% 1. Spawn the auction logic process
-  Pid = spawn(fun() -> 'DS_auction_handler':start(AuctionId, Price, Name, 30) end),
+  Pid = spawn(fun() -> 'DS_auction_handler':start(AuctionId, Price, Name, 100) end),
 
   %% 2. Spawn the chat process for this specific auction
   spawn(fun() -> chat_handler:start(AuctionId) end),
