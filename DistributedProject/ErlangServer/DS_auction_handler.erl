@@ -26,7 +26,7 @@
   high_bidder = none,
   time_remaining,
   bids_history = [],
-  extend_threshold = 10,  % Extend if bid arrives with <= 10 seconds left
+  extend_threshold = 30,  % Extend if bid arrives with <= 10 seconds left
   server_start_time       % time when auction started on server
 }).
 
@@ -173,6 +173,8 @@ handle_bid(State, ClientPid, UserId, Amount) ->
       NewTime = if
                   TimeRemaining =< ExtendThreshold ->
                     io:format("[AUCTION ~p] Timer EXTENDED to 30 seconds~n", [AuctionID]),
+                    {java_listener, 'java_node@127.0.0.1'} ! {bid_accepted, AuctionID, Amount, UserId},
+
                     30;
                   true ->
                     TimeRemaining

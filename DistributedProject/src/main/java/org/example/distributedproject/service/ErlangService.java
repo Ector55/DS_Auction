@@ -127,6 +127,9 @@ public class ErlangService {
                     else if (isAtom(tuple.elementAt(0), "bid_rejected")){
                         handleBidRejected(tuple);
                     }
+                    else if(isAtom(tuple.elementAt(0), "bid_accepted")){
+                        handleTimer(tuple);
+                    }
                 }
             } catch (Exception e) {
                 System.err.println("Listener Error: " + e.getMessage());
@@ -164,6 +167,15 @@ public class ErlangService {
         }
     }
 
+    private void handleTimer(OtpErlangTuple tuple){
+        try {
+            Double amount = extractDouble(tuple.elementAt(1));
+            Double time = extractDouble(tuple.elementAt(2));
+            System.out.println("Timer Extended by 30 seconds");
+        } catch (Exception e) {
+            System.err.println("Error handling bid_accepted msg");
+        }
+    }
 
     private void handleIncomingChatMessage(OtpErlangTuple tuple) {
         try {
