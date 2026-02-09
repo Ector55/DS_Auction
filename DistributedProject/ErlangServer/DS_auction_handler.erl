@@ -116,9 +116,6 @@ loop(State) ->
 
   end.
 
-
-%% Handle Bid - Validates and processes a bid
-
 %% Handle Bid - Validates and processes a bid
 handle_bid(State, ClientPid, UserId, Amount) ->
   AuctionID = State#state.auction_id,
