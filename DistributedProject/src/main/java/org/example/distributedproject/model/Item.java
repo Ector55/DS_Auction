@@ -25,17 +25,21 @@ public class Item {
     @Column(nullable = false, length = 1000)
     private String description;
 
+    @Column (nullable = false)
+    private String imageURL;
+
     public Item(){
 
     }
 
-    public Item(Long id, String name, String type, String description, String status, Double startingPrice) {
+    public Item(Long id, String name, String type, String description, String status, Double startingPrice, String imageURL) {
         this.id = id;
         this.name = name;
         this.type = type;
         this.description = description;
         this.status = status;
         this.startingPrice = startingPrice;
+        this.imageURL = imageURL;
     }
 
     public Long getId() {
@@ -44,6 +48,14 @@ public class Item {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getImageURL() {
+        return imageURL;
+    }
+
+    public void setImageURL(String imageURL) {
+        this.imageURL = imageURL;
     }
 
     public String getName() {
