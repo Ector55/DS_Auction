@@ -45,9 +45,6 @@ public class ErlangService {
         System.out.println("Mailbox 'java_listener' ready.");
     }
 
-    /**
-     * Sends a chat message from Web Frontend to the Erlang Chat Handler.
-     */
     public void sendChatMessage(int auctionId, String user, String message) {
         try {
             String chatProcessName = "chat_" + auctionId;
@@ -62,9 +59,7 @@ public class ErlangService {
         }
     }
 
-    /**
-     * Handles Bid requests from the Web Frontend.
-     */
+
     public String placeBid(Long auctionId, Double amount) {
         OtpMbox tempMbox = null;
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -80,7 +75,8 @@ public class ErlangService {
                     tempMbox.self(),
                     new OtpErlangAtom("bid"),
                     new OtpErlangLong(userId),
-                    new OtpErlangDouble(amount)
+                    new OtpErlangDouble(amount),
+                    new OtpErlangString(username)
             };
             tempMbox.send(auctionProcessName, erlangServerNode, new OtpErlangTuple(payload));
             OtpErlangObject response = tempMbox.receive(5000);
@@ -142,11 +138,11 @@ public class ErlangService {
             // {new_bid, AuctionId, NewPrice, BidderName}
             String auctionId = tuple.elementAt(1).toString();
             Double price = extractDouble(tuple.elementAt(2));
-            String userId = extractString(tuple.elementAt(3));
+            String bidderName = extractString(tuple.elementAt(3));
 
             messagingTemplate.convertAndSend("/topic/auction/" + auctionId + "/updates",
-                    new BidUpdateDto(price, userId));
-            System.out.println("New Bid for Auction [" + auctionId + "] - Bidder: " + userId + ", Amount: " + price);
+                    new BidUpdateDto(price, bidderName));
+            System.out.println("New Bid for Auction [" + auctionId + "] - Bidder: " + bidderName + ", Amount: " + price);
         } catch (Exception e) {
             System.err.println("Error handling new_bid: " + e.getMessage());
         }
