@@ -194,9 +194,16 @@ handle_winner(State) ->
   Winner = State#state.high_bidder,
   FinalPrice = State#state.current_bid,
   ItemName = State#state.item_name,
+  UserName = State#state.high_bidder_name,
 
   %% Format winner for Java compatibility
-  JavaWinner = if Winner == none -> "no_winner"; true -> Winner end,
+  {JavaWinner, WinnerName} = if
+                               Winner == none ->
+                                 {"no_winner", "No winner available"};
+                               true ->
+                                 {Winner, UserName}
+                             end,
+
 
   %% 1. Identify and stop the associated chat process
   ChatName = list_to_atom("chat_" ++ integer_to_list(AuctionID)),
@@ -206,7 +213,7 @@ handle_winner(State) ->
   end,
 
   %% 2. Notify the Java listener about the auction results
-  {java_listener, 'java_node@127.0.0.1'} ! {auction_closed, AuctionID, JavaWinner, FinalPrice},
+  {java_listener, 'java_node@127.0.0.1'} ! {auction_closed, AuctionID, JavaWinner, WinnerName, FinalPrice},
 
   %% 3. Print auction summary to the console
   io:format("~n========================================~n"),

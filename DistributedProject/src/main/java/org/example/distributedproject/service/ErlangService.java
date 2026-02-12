@@ -190,13 +190,14 @@ public class ErlangService {
 
     private void handleAuctionClosed(OtpErlangTuple tuple) {
         try {
-            // Expected: {auction_closed, AuctionId, Winner, Price}
+            // Expected: {auction_closed, AuctionId, JavaWinner, WinnderName, Price}
             Long auctionId = ((OtpErlangLong) tuple.elementAt(1)).longValue();
             String winner = extractString(tuple.elementAt(2));
-            Double price = ((OtpErlangDouble) tuple.elementAt(3)).doubleValue();
+            String userName = extractString((tuple.elementAt(3)));
+            Double price = ((OtpErlangDouble) tuple.elementAt(4)).doubleValue();
 
             itemService.closeItem(auctionId, winner, price);
-            System.out.println("Auction " + auctionId + " closed. Winner: " + winner);
+            System.out.println("Auction " + auctionId + " closed. Winner: " + userName);
         } catch (Exception e) {
             e.printStackTrace();
         }
