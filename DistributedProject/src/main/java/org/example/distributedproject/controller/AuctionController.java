@@ -40,7 +40,7 @@ public class AuctionController {
     }
 
 
-    @PostMapping("/{itemId}/bid")
+    @PostMapping("/{Id}/bid")
     public ResponseEntity<String> bid(@PathVariable Long Id, @RequestBody Double amount) {
         try {
             erlangService.placeBid(Id, amount);
@@ -48,7 +48,7 @@ public class AuctionController {
             return ResponseEntity.noContent().build();
         }
 
-       return ResponseEntity.ok("Offer sent to the handler!");
+       return ResponseEntity.ok("Offer sent to the handler: " + erlangService.placeBid(Id, amount));
     }
 
 
