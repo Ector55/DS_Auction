@@ -118,6 +118,11 @@ loop(State) ->
       ClientPid ! {time_response, ServerTime},
       loop(State);
 
+    {'$gen_call', {From, MRef}, get_remaining_time} ->
+      %% Dobbiamo rispondere con il formato che gen_server si aspetta: {MRef, Risposta}
+      From ! {MRef, State#state.time_remaining},
+      loop(State);
+
   %% UNKNOWN MESSAGE - ignore and continue loop
     _Other ->
       loop(State)
@@ -201,7 +206,7 @@ handle_winner(State) ->
   Winner = State#state.high_bidder,
   FinalPrice = State#state.current_bid,
   ItemName = State#state.item_name,
-  UserName = State#state.high_bidder_name,
+ % UserName = State#state.high_bidder_name,
 
   %% Format winner for Java compatibility
 %%  {JavaWinner, WinnerName} = if

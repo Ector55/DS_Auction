@@ -5,8 +5,9 @@ public class Auction {
     private Long id;
     private Item item;
     private Long duration;
-    private Long startingPrice;
+    private Double startingPrice;
     private User winner;
+
 
     public Long getId() {
         return id;
@@ -32,11 +33,11 @@ public class Auction {
         this.duration = duration;
     }
 
-    public Long getStartingPrice() {
+    public Double getStartingPrice() {
         return startingPrice;
     }
 
-    public void setStartingPrice(Long startingPrice) {
+    public void setStartingPrice(Double startingPrice) {
         this.startingPrice = startingPrice;
     }
 
@@ -48,7 +49,7 @@ public class Auction {
         this.winner = winner;
     }
 
-    public Auction(Long id, Item item, Long duration, Long startingPrice, User winner) {
+    public Auction(Long id, Item item, Long duration, Double startingPrice, User winner) {
         this.id = id;
         this.item = item;
         this.duration = duration;

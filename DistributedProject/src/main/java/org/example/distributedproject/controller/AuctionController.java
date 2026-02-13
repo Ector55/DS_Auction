@@ -1,5 +1,6 @@
 package org.example.distributedproject.controller;
 
+import org.example.distributedproject.model.Auction;
 import org.example.distributedproject.model.Item;
 import org.example.distributedproject.repository.ItemRepository;
 import org.example.distributedproject.service.ErlangService;
@@ -63,6 +64,14 @@ public class AuctionController {
 
         //HTTP 200 OK
         return ResponseEntity.ok().build();
+    }
+
+    // In AuctionController.java
+
+    @GetMapping("/active")
+    public List<Auction> getActiveAuctions() {
+        // Chiama il metodo sincrono che interroga Erlang e aspetta la risposta
+        return erlangService.fetchActiveAuctionsFromErlang();
     }
 
 }

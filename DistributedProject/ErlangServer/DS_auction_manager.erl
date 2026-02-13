@@ -109,9 +109,27 @@ handle_info({'DOWN', _Ref, process, Pid, Reason}, State) ->
       end
   end;
 
+handle_info({FromPid, Ref, get_active_auctions}, State) ->
+  %% Iteriamo sulla mappa delle aste attive
+  ActiveList = maps:fold(fun(AuctionId, {Pid, ItemId}, Acc) ->
+
+    TimeLeft = try
+                 gen_server:call(Pid, get_remaining_time, 100) %% Timeout breve 100ms
+               catch
+                 _:_ -> 0 %% Se fallisce, diciamo 0
+               end,
+
+    %% Aggiungiamo TimeLeft alla tupla: {AuctionId, ItemId, TimeLeft}
+    [{AuctionId, ItemId, TimeLeft} | Acc]
+                         end, [], State#state.active_slots),
+
+  FromPid ! {Ref, active_auctions_response, ActiveList},
+  {noreply, State};
+
 handle_info(Info, State) ->
   io:format("[MANAGER] Unexpected message: ~p~n", [Info]),
   {noreply, State}.
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% private functions

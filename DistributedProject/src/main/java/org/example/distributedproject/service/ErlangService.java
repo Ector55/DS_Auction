@@ -3,6 +3,7 @@ package org.example.distributedproject.service;
 import com.ericsson.otp.erlang.*;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import org.example.distributedproject.model.Auction;
 import org.example.distributedproject.model.Item;
 import org.example.distributedproject.model.User;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,6 +13,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 public class ErlangService {
@@ -301,4 +304,72 @@ public class ErlangService {
     public record ChatMessageDto(String user, String message) {}
     public record BidUpdateDto(Double price, String bidder) {}
 
+
+    public List<Auction> fetchActiveAuctionsFromErlang() {
+        OtpMbox tempMbox = null;
+        try {
+            tempMbox = node.createMbox(); // Create a temporary mailbox for the reply
+            OtpErlangObject[] request = new OtpErlangObject[]{
+                    tempMbox.self(),
+                    node.createRef(),
+                    new OtpErlangAtom("get_active_auctions")
+            };
+
+            // Send to the manager
+            tempMbox.send("DS_auction_manager", erlangServerNode, new OtpErlangTuple(request));
+            // Wait for reply (timeout 5 seconds)
+            OtpErlangObject response = tempMbox.receive(5000);
+            System.out.println("DEBUG: Risposta grezza da Erlang: " + response); // <--- AGGIUNGI QUESTO
+
+            if (response instanceof OtpErlangTuple respTuple) {
+                // Expected: {Ref, active_auctions_response, [List]}
+                OtpErlangAtom status = (OtpErlangAtom) respTuple.elementAt(1);
+
+                if ("active_auctions_response".equals(status.atomValue())) {
+                    OtpErlangList auctionList = (OtpErlangList) respTuple.elementAt(2);
+                    return mapErlangListToAuctions(auctionList);
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (tempMbox != null) node.closeMbox(tempMbox);
+        }
+        return new ArrayList<>(); // Return empty if failed
+    }
+
+
+    private List<Auction> mapErlangListToAuctions(OtpErlangList erlangList) {
+        List<Auction> result = new ArrayList<>();
+
+        for (OtpErlangObject obj : erlangList) {
+            if (obj instanceof OtpErlangTuple auctionTuple) {
+                try {
+                    // La tupla ora è: {AuctionId, ItemId, TimeLeft}
+                    Long auctionId = extractLong(auctionTuple.elementAt(0));
+                    Long itemId = extractLong(auctionTuple.elementAt(1));
+
+                    // NUOVO: Estrai il tempo rimanente (3° elemento, indice 2)
+                    Long timeLeft = extractLong(auctionTuple.elementAt(2));
+
+                    Item item = itemService.getItemById(itemId);
+
+                    if (item != null) {
+                        Auction auction = new Auction(
+                                auctionId,
+                                item,
+                                timeLeft, // <--- Qui usiamo il tempo vero ricevuto da Erlang
+                                item.getStartingPrice(),
+                                null
+                        );
+                        result.add(auction);
+                    }
+                } catch (Exception e) {
+                    System.err.println("Failed to map auction tuple: " + obj);
+                    e.printStackTrace();
+                }
+            }
+        }
+        return result;
+    }
 }
