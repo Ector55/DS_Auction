@@ -1,6 +1,5 @@
 package org.example.distributedproject.controller;
 import org.example.distributedproject.model.User;
-import org.example.distributedproject.repository.UserRepository;
 import org.example.distributedproject.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
