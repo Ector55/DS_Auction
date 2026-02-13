@@ -50,6 +50,30 @@ public class ItemService {
         return itemRepository.save(itemEsistente);
     }
 
+    @Transactional
+    public void markItemPending(Long itemId) {
+
+        try {
+            Item item = itemRepository.findById(itemId).orElse(null);
+            if (item != null) {
+                item.setStatus("PENDING");
+
+                Item saved = itemRepository.saveAndFlush(item);
+
+                //itemRepository.save(item);
+
+
+                System.out.println("Item " + itemId + " marked as PENDING (will be re-auctioned)");
+            } else {
+                System.err.println(" Item " + itemId + " not found!");
+            }
+        }  catch (Exception e) {
+            System.err.println(" ERROR marking item as PENDING:");
+
+            throw new RuntimeException(e);  // Force rollback to see errors
+        }
+    }
+
 
     @Transactional
     public Item activateAndGetNextItem() {

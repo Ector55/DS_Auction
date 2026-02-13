@@ -11,7 +11,7 @@
 -author("crazy").
 
 %% API
--export([start/4, loop/1]).
+-export([start/1, loop/1]).
 
 %% time synchronization api(Cristian's algortihm)
 -export([get_server_time/1, get_server_time/2, sync_time/1, sync_time/2]).
@@ -21,37 +21,44 @@
 %% State record
 -record(state, {
   auction_id,
+  item_id,
   item_name,
   current_bid,
   high_bidder = none,
   high_bidder_name = "None",
   time_remaining,
   bids_history = [],
-  extend_threshold = 30,  % Extend if bid arrives with <= 10 seconds left
+  extend_threshold = 30,  % Extend if bid arrives with <= 30 seconds left
   server_start_time       % time when auction started on server
 }).
 
 
-%% start an auction
-
-start(AuctionID, StartingPrice, ItemName, Duration) ->
-  io:format("[AUCTION ~p] Started. Item: '~s', Starting price: ~p, Duration: ~p s~n",
-    [AuctionID, ItemName, StartingPrice, Duration]),
-
-  erlang:send_after(1000, self(), clock),
-
-  InitialState = #state{
-    auction_id = AuctionID,
-    item_name = ItemName,
-    current_bid = StartingPrice,
-    time_remaining = Duration,
-    server_start_time = erlang:system_time(millisecond)
-  },
-
-%% Register the process locally so it can be reached by "auction_ID"
+%% permanent slot: starts in idle mode, waits for items to be assigned
+start(AuctionID) ->
+  %% Register the process locally so it can be reached by "auction_ID"
   register(list_to_atom("auction_" ++ integer_to_list(AuctionID)), self()),
+  idle_loop(AuctionID).
 
-  loop(InitialState).
+%% Idle loop: waits for an item to load
+idle_loop(AuctionID) ->
+  receive
+    {load_item, ItemId, ItemName, StartingPrice, Duration} ->
+      io:format("[AUCTION ~p] Loaded new item: ~s (Id = ~p) Starting price: ~p, Duration: ~p s~n",
+        [AuctionID, ItemName, ItemId, StartingPrice, Duration]),
+      erlang:send_after(1000, self(), clock),
+      InitialState = #state{
+        auction_id = AuctionID,
+        item_id = ItemId,
+        item_name = ItemName,
+        current_bid = StartingPrice,
+        time_remaining = Duration,
+        server_start_time = erlang:system_time(millisecond)
+      },
+      loop(InitialState);
+    _Other ->
+      idle_loop(AuctionID)
+  end.
+
 
 %% main Loop - to receive and handle messages
 
@@ -197,12 +204,12 @@ handle_winner(State) ->
   UserName = State#state.high_bidder_name,
 
   %% Format winner for Java compatibility
-  {JavaWinner, WinnerName} = if
-                               Winner == none ->
-                                 {"no_winner", "No winner available"};
-                               true ->
-                                 {Winner, UserName}
-                             end,
+%%  {JavaWinner, WinnerName} = if
+%%                               Winner == none ->
+%%                                 {"no_winner", "No winner available"};
+%%                               true ->
+%%                                 {Winner, UserName}
+%%                             end,
 
 
   %% 1. Identify and stop the associated chat process
@@ -213,27 +220,45 @@ handle_winner(State) ->
   end,
 
   %% 2. Notify the Java listener about the auction results
-  {java_listener, 'java_node@127.0.0.1'} ! {auction_closed, AuctionID, JavaWinner, WinnerName, FinalPrice},
-
-  %% 3. Print auction summary to the console
-  io:format("~n========================================~n"),
+%%  {java_listener, 'java_node@127.0.0.1'} ! {auction_closed, AuctionID, JavaWinner, WinnerName, FinalPrice},
   case Winner of
     none ->
-      io:format("[AUCTION ~p] ENDED - NO BIDS~n", [AuctionID]),
-      io:format("Item '~s' received no bids.~n", [ItemName]);
+      %% no bids - items will go back to pending
+      {?JAVA_MAILBOX, ?JAVA_NODE} ! {auction_unsold, State#state.item_id},
+      io:format("[AUCTION ~p] No bids - item ~p will be returned to pending state~n", [AuctionID, State#state.item_id]);
     _ ->
-      io:format("[AUCTION ~p] ENDED - SOLD!~n", [AuctionID]),
-      io:format("Item: '~s'~n", [ItemName]),
-      io:format("Winner: User ~p~n", [Winner]),
-      io:format("Final Price: ~p~n", [FinalPrice]),
-      io:format("Total Bids: ~p~n", [length(State#state.bids_history)])
-  end,
-  io:format("========================================~n~n"),
+      {JavaWinner,WinnerName} = case Winner of
+                                  Winner when is_list(Winner) -> {list_to_binary(Winner), State#state.high_bidder_name};
+                                  Winner when is_atom(Winner) -> {list_to_binary(atom_to_list(Winner)), State#state.high_bidder_name};
+                                  Winner -> {list_to_binary(io_lib:format("~p", [Winner])), State#state.high_bidder_name}
+                                end,
+      %% Sold - notify java with winner and price
+      {?JAVA_MAILBOX, ?JAVA_NODE} ! {auction_closed, State#state.item_id, JavaWinner, WinnerName, FinalPrice},
+      io:format("[AUCTION ~p] SOLD! ~s for ~p to ~s~n",
+        [AuctionID, ItemName, FinalPrice, State#state.high_bidder_name])
+      end,
+%%  %% 3. Print auction summary to the console
+%%  io:format("~n========================================~n"),
+%%  case Winner of
+%%    none ->
+%%      io:format("[AUCTION ~p] ENDED - NO BIDS~n", [AuctionID]),
+%%      io:format("Item '~s' received no bids.~n", [ItemName]);
+%%    _ ->
+%%      io:format("[AUCTION ~p] ENDED - SOLD!~n", [AuctionID]),
+%%      io:format("Item: '~s'~n", [ItemName]),
+%%      io:format("Winner: User ~p~n", [Winner]),
+%%      io:format("Final Price: ~p~n", [FinalPrice]),
+%%      io:format("Total Bids: ~p~n", [length(State#state.bids_history)])
+%%  end,
+%%  io:format("========================================~n~n"),
 
   %% 4. Notify the Manager that the auction logic is finished
   case whereis('DS_auction_manager') of
     undefined -> ok;
-    ManagerPid -> ManagerPid ! {auction_ended, AuctionID, Winner, FinalPrice}
+    ManagerPid -> case Winner of
+                    none ->ManagerPid ! {auction_ended, AuctionID, State#state.item_id, no_bids};
+                    _ -> ManagerPid ! {auction_ended, AuctionID, State#state.item_id, {sold, Winner, FinalPrice}}
+                  end
   end,
 
   %% 5. Unregister the process name to allow reuse of the ID later

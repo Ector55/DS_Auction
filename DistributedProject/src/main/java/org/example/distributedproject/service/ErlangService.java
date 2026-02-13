@@ -54,6 +54,7 @@ public class ErlangService {
                     new OtpErlangString(message)
             };
             mainMbox.send(chatProcessName, erlangServerNode, new OtpErlangTuple(msgPayload));
+            System.out.println("Chat message sent to " + chatProcessName + "@" + erlangServerNode);
         } catch (Exception e) {
             System.err.println("Error sending chat to Erlang: " + e.getMessage());
         }
@@ -112,9 +113,13 @@ public class ErlangService {
                     else if (isAtom(tuple.elementAt(0), "chat_msg")) {
                         handleIncomingChatMessage(tuple);
                     }
-                    // 3. Handle Auction Completion
-                    else if (isAtom(tuple.elementAt(0), "auction_closed")) {
+                    // 3. Handle Auction Completion i.e
+                    else if (tuple.arity() == 5 &&isAtom(tuple.elementAt(0), "auction_closed")) {
                         handleAuctionClosed(tuple);
+                    }
+                    // 4. Auction unsold (no bids)
+                    else if (tuple.arity() == 2 && isAtom(tuple.elementAt(0), "auction_unsold")) {
+                        handleAuctionUnsold(tuple);
                     }
                     else if (isAtom(tuple.elementAt(0), "new_bid")) {
                         handleNewBid(tuple);
@@ -125,11 +130,32 @@ public class ErlangService {
                     }
                     else if(isAtom(tuple.elementAt(0), "bid_accepted")){
                         handleTimer(tuple);
-                    }
+                    }  //else {
+//                        System.out.println(" UNKNOWN MESSAGE TYPE: " + tuple.elementAt(0));
+//                    }
                 }
-            } catch (Exception e) {
+            } catch (OtpErlangException e) {
+                System.err.println("Erlang connection losy.");
+                break;
+            }
+            catch (Exception e) {
                 System.err.println("Listener Error: " + e.getMessage());
             }
+        }
+
+    }
+
+    // handle unsold items
+    private void handleAuctionUnsold(OtpErlangTuple tuple) {
+
+        try {
+            Long itemId = ((OtpErlangLong) tuple.elementAt(1)).longValue();
+
+            // mark item as pending again so it can be re-auctioned
+            itemService.markItemPending(itemId);
+
+        } catch (Exception e) {
+            System.err.println("Error in processing auction_unsold: " + e.getMessage());
         }
     }
 
@@ -191,13 +217,13 @@ public class ErlangService {
     private void handleAuctionClosed(OtpErlangTuple tuple) {
         try {
             // Expected: {auction_closed, AuctionId, JavaWinner, WinnderName, Price}
-            Long auctionId = ((OtpErlangLong) tuple.elementAt(1)).longValue();
+            Long itemId = ((OtpErlangLong) tuple.elementAt(1)).longValue();
             String winner = extractString(tuple.elementAt(2));
             String userName = extractString((tuple.elementAt(3)));
             Double price = ((OtpErlangDouble) tuple.elementAt(4)).doubleValue();
 
-            itemService.closeItem(auctionId, winner, price);
-            System.out.println("Auction " + auctionId + " closed. Winner: " + userName);
+            itemService.closeItem(itemId, winner, price);
+            System.out.println("Item " + itemId + " sold. Winner: " + userName + ", Price:" + price);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -208,16 +234,39 @@ public class ErlangService {
             OtpErlangPid senderPid = (OtpErlangPid) tuple.elementAt(0);
             OtpErlangRef msgId = (OtpErlangRef) tuple.elementAt(1);
 
-            Item item = itemService.activateAndGetNextItem();
-            System.out.println("+++ [ACTIVATING] Manager requested next item. Starting Auction #" + item.getId() + " (" + item.getName() + ")");
-            OtpErlangList auctionList = (item != null) ?
-                    new OtpErlangList(new OtpErlangTuple(new OtpErlangObject[]{
-                            new OtpErlangLong(item.getId()), new OtpErlangString(item.getName()), new OtpErlangDouble(item.getStartingPrice())
-                    })) : new OtpErlangList();
+            int requestedCount = ((OtpErlangLong) tuple.elementAt(3)).intValue();
+            System.out.println("[JAVA] Requested " + requestedCount + " items");
 
-            mainMbox.send(senderPid, new OtpErlangTuple(new OtpErlangObject[]{
-                    msgId, new OtpErlangAtom("java_response"), auctionList
-            }));
+//            Item item = itemService.activateAndGetNextItem();
+//            System.out.println("+++ [ACTIVATING] Manager requested next item. Starting Auction #" + item.getId() + " (" + item.getName() + ")");
+//            OtpErlangList auctionList = (item != null) ?
+//                    new OtpErlangList(new OtpErlangTuple(new OtpErlangObject[]{
+//                            new OtpErlangLong(item.getId()), new OtpErlangString(item.getName()), new OtpErlangDouble(item.getStartingPrice())
+//                    })) : new OtpErlangList();
+//
+//            mainMbox.send(senderPid, new OtpErlangTuple(new OtpErlangObject[]{
+//                    msgId, new OtpErlangAtom("java_response"), auctionList
+//            }));
+
+            if (requestedCount > 0) {
+                Item item = itemService.activateAndGetNextItem();
+
+                OtpErlangList auctionList;
+                if (item != null) {
+                    System.out.println("+++ [ACTIVATING] Manager requested next item. Starting Auction with Item #" + item.getId() + " (" + item.getName() + ") for next available slot");
+                    auctionList = new OtpErlangList(new OtpErlangTuple(new OtpErlangObject[]{
+                            new OtpErlangLong(item.getId()),
+                            new OtpErlangString(item.getName()),
+                            new OtpErlangDouble(item.getStartingPrice())
+                    }));
+                } else {
+                    System.out.println("[JAVA] No PENDING Items found");
+                    auctionList = new OtpErlangList();
+                }
+                mainMbox.send(senderPid, new OtpErlangTuple(new OtpErlangObject[]{
+                        msgId, new OtpErlangAtom("java_response"), auctionList
+                }));
+            }
         } catch (Exception e) { e.printStackTrace(); }
     }
 
