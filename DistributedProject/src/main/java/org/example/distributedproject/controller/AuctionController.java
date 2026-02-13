@@ -8,6 +8,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 //Controller responsible for handling Auction-related operations.
 //It acts as a bridge between the frontend, the database, and the Erlang backend node.
 @RestController
@@ -23,7 +25,7 @@ public class AuctionController {
 
     //Endpoint to finalize an auction.
     @PostMapping("/close")
-    public void closeAuction(@RequestParam Long itemId, @RequestParam String winner, @RequestParam Double price) {
+    public void closeAuction(@RequestParam Long itemId, @RequestBody String winner, @RequestBody Double price) {
 
         System.out.println("Erlang closed auction " + itemId + ". Winner: " + winner + " Price: " + price);
 
@@ -39,15 +41,20 @@ public class AuctionController {
 
 
     @PostMapping("/{itemId}/bid")
-    public ResponseEntity<String> bid(@PathVariable Long itemId, @RequestParam Double amount) {
-       erlangService.placeBid(itemId, amount);
+    public ResponseEntity<String> bid(@PathVariable Long Id, @RequestBody Double amount) {
+        try {
+            erlangService.placeBid(Id, amount);
+        } catch (Exception e){
+            return ResponseEntity.noContent().build();
+        }
+
        return ResponseEntity.ok("Offer sent to the handler!");
     }
 
 
   //Endpoint to handle sending chat messages within a specific auction.
     @PostMapping("/{id}/chat")
-    public ResponseEntity<?> postChatMessage(@PathVariable int id, @RequestParam String message) {
+    public ResponseEntity<?> postChatMessage(@PathVariable int id, @RequestBody String message) {
         //Retrieve the currently authenticated username
         String currentUser = SecurityContextHolder.getContext().getAuthentication().getName();
 
