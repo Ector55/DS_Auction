@@ -31,6 +31,8 @@ loop(AuctionID, Participants) ->
 
   %% A user sends a message
     {post_message, FromUser, Content} ->
+      %% show message on erlang console
+      io:format("[CHAT ~p] ~s: ~s~n", [AuctionID, FromUser, Content]),
       Timestamp = erlang:system_time(second),
 
       %% 1. BROADCAST to Erlang participants (Other terminals)
