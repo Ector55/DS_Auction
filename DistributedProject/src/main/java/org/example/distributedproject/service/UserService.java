@@ -29,7 +29,7 @@ public class UserService {
     }
 
     public User save(User user) {
-        // Cripta la password prima di salvare
+        //encrypting psw
         String encodedPassword = passwordEncoder.encode(user.getPassword());
         user.setPassword(encodedPassword);
         return userRepository.save(user);
@@ -41,7 +41,7 @@ public class UserService {
 
     public User update(Long id, User user){
         User user1 = userRepository.findById(id).orElse(null);
-        if(user1 == null){
+        if (user1 == null) {
             return null;
         }
         user1.setName(user.getName());

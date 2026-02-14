@@ -16,30 +16,28 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -define(JAVA_NODE, 'java_node@127.0.0.1').
--define(JAVA_MAILBOX, 'java_listener').         %% Name of the Mailbox created in Java
--define(POLL_INTERVAL, 5000).                   %% Check for new auctions every 5s
+-define(JAVA_MAILBOX, 'java_listener').
+-define(POLL_INTERVAL, 5000).
 
-%% Internal state structure
+
 -record(state, {
-  active_slots = #{} :: map() %% Map of PID -> AuctionId
+  active_slots = #{} :: map()
 }).
 
-%% Starts the manager server and registers it locally
+%%starts the manager server and registers it locally
 start_link() ->
   gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
-%% Initializes the server and starts the periodic polling timer
+%%initialize the server and starts the periodic polling timer
 init([]) ->
   io:format("[MANAGER] Server started. Waiting for Java...~n"),
 
-  %% start the 3 permanent slots
+  %%start the 3 permanent slots
   start_permanent_slots(),
 
-  %% Sends 'check_for_auctions' to self every 5 seconds
   timer:send_interval(?POLL_INTERVAL, check_for_auctions),
   {ok, #state{active_slots = #{}}}.
 
-%% Checks availability and requests new auctions from Java
 handle_info(check_for_auctions, State) ->
   FreeSlots = get_free_slots(State#state.active_slots),
 
@@ -56,15 +54,11 @@ handle_info(check_for_auctions, State) ->
       {noreply, NewState}
   end;
 
-%% auction_ended normally (no crash etc)
+%%auction_ended normally
 handle_info({auction_ended, AuctionId, ItemId, Result}, State) ->
   io:format("[MANAGER] Auction ~p (Item ~p) notified end: ~p Waiting for process cleanup...~n", [AuctionId, ItemId, Result]),
-  %%  {noreply, State};
-
-  %% notify Java about the result
   notify_java(Result, ItemId),
 
-  %% remove from active slots (but the slot stays alive, just will have no item)
   NewSlots = maps:remove(AuctionId, State#state.active_slots),
 
   NewPid = spawn(fun() -> 'DS_auction_handler':start(AuctionId) end),
@@ -72,22 +66,21 @@ handle_info({auction_ended, AuctionId, ItemId, Result}, State) ->
   'DS_auction_monitor':monitor_auction(NewPid, AuctionId),
   io:format("[MANAGER] Started new idle auction ~p (Pid: ~p)~n", [AuctionId, NewPid]),
 
-  %% Wait a bit for the process to clean up before requesting new items
   erlang:send_after(500, self(), check_for_items),
 
   {noreply, State#state{active_slots = NewSlots}};
 
-%% monitor reports a slot crashed
+%%monitor reports a slot crashed
 handle_info({'DOWN', _Ref, process, Pid, Reason}, State) ->
   io:format("[MANAGER] process ~p died: ~p~n", [Pid,Reason]),
 
-  %% Only restart if the slot crashed (not on normal exit)
+  %%Only restart if the slot crashed (not on normal exit)
   case Reason of
     normal ->
       io:format("[MANAGER] Process ~p exited normally, ignoring~n", [Pid]),
       {noreply, State};
     _ ->
-      %% find the slot that crashed
+      %%find the slot that crashed
       CrashedSlot = find_slot_by_pid(Pid, State#state.active_slots),
 
       case CrashedSlot of
@@ -96,13 +89,12 @@ handle_info({'DOWN', _Ref, process, Pid, Reason}, State) ->
         AuctionId ->
           io:format("[MANAGER] Restarting auction ~p...~n", [AuctionId]),
 
-          %% remove from active (it'll get a new item on next check)
+          %% remove from active
           NewSlots = maps:remove(AuctionId, State#state.active_slots),
-
-          %% restart the slot
+          %%restart the slot
           NewPid = spawn(fun() -> 'DS_auction_handler':start(AuctionId) end),
 
-          timer:sleep(50), %% we give it 50 ms to register
+          timer:sleep(50),
           'DS_auction_monitor':monitor_auction(NewPid,AuctionId),
 
           {noreply, State#state{active_slots = NewSlots}}
@@ -110,16 +102,14 @@ handle_info({'DOWN', _Ref, process, Pid, Reason}, State) ->
   end;
 
 handle_info({FromPid, Ref, get_active_auctions}, State) ->
-  %% Iteriamo sulla mappa delle aste attive
   ActiveList = maps:fold(fun(AuctionId, {Pid, ItemId}, Acc) ->
 
     TimeLeft = try
                  gen_server:call(Pid, get_remaining_time, 100) %% Timeout breve 100ms
                catch
-                 _:_ -> 0 %% Se fallisce, diciamo 0
+                 _:_ -> 0
                end,
 
-    %% Aggiungiamo TimeLeft alla tupla: {AuctionId, ItemId, TimeLeft}
     [{AuctionId, ItemId, TimeLeft} | Acc]
                          end, [], State#state.active_slots),
 
@@ -135,7 +125,7 @@ handle_info(Info, State) ->
 %% private functions
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%% start the 3 permanent auction slot processes
+%%start the 3 permanent auction slot processes
 start_permanent_slots() ->
   lists:foreach(fun(AuctionId) ->
     AuctionName = list_to_atom("auction_" ++ integer_to_list(AuctionId)),
@@ -150,13 +140,12 @@ start_permanent_slots() ->
                 end, [1,2,3]).
 
 
-%% get list of slots that don't have an active item
+%%get list of slots that don't have an active item
 get_free_slots(ActiveSlots) ->
   AllSlots = [1, 2, 3],
   BusySlots = maps:keys(ActiveSlots),
   AllSlots -- BusySlots.
 
-%% load items into free slots
 load_items_into_slots([], _FreeSlots, State) ->
   State;
 load_items_into_slots(_Items, [], State) ->
@@ -172,14 +161,13 @@ load_items_into_slots([{ItemId, Name, Price} | RestItems], [AuctionId | RestSlot
       io:format("[MANAGER] Loading Item#~p '~s' into auction ~p~n", [ItemId, Name, AuctionId]),
       Pid ! {load_item, ItemId, Name, Price, Duration},
 
-      %% Spawn the chat process for this specific auction
       spawn(fun() -> chat_handler:start(AuctionId) end),
 
       NewSlots = maps:put(AuctionId,{Pid,ItemId}, State#state.active_slots),
       load_items_into_slots(RestItems, RestSlots, State#state{active_slots = NewSlots})
   end.
 
-%% find which slot a PID belongs to
+%%find which slot a PID belongs to
 find_slot_by_pid(Pid, ActiveSlots) ->
   Result = maps:filter(fun(_AuctionId, {P, _ItemId}) -> P =:= Pid end, ActiveSlots),
   case maps:keys(Result) of
@@ -187,7 +175,6 @@ find_slot_by_pid(Pid, ActiveSlots) ->
     [] -> undefined
   end.
 
-%% Notify java about auction result
 notify_java({sold , Winner, Price}, ItemId) ->
   io:format("[MANAGER] Notifying Java: Item ~p SOLD to ~p for ~p~n", [ItemId, Winner, Price]),
   {?JAVA_MAILBOX, ?JAVA_NODE} ! {auction_closed, ItemId, Winner, Price};
@@ -201,7 +188,7 @@ handle_cast(_Msg, State) -> {noreply, State}.
 terminate(_Reason, _State) -> ok.
 code_change(_OldVsn, State, _Extra) -> {ok, State}.
 
-%% Communicates with Java to fetch Pending auctions
+%%fetch Pending auctions
 fetch_auctions_rpc(Count) ->
   MsgId = make_ref(),
 

@@ -13,12 +13,12 @@
 %% API
 -export([start/1, loop/1]).
 
-%% time synchronization api(Cristian's algortihm)
 -export([get_server_time/1, get_server_time/2, sync_time/1, sync_time/2]).
 
 -define(JAVA_NODE, 'java_node@127.0.0.1').
 -define(JAVA_MAILBOX, 'java_listener').
-%% State record
+
+%%State record
 -record(state, {
   auction_id,
   item_id,
@@ -28,18 +28,17 @@
   high_bidder_name = "None",
   time_remaining,
   bids_history = [],
-  extend_threshold = 30,  % Extend if bid arrives with <= 30 seconds left
-  server_start_time       % time when auction started on server
+  extend_threshold = 30,
+  server_start_time
 }).
 
 
-%% permanent slot: starts in idle mode, waits for items to be assigned
+%%permanent slot: starts in idle mode, waits for items to be assigned
 start(AuctionID) ->
-  %% Register the process locally so it can be reached by "auction_ID"
   register(list_to_atom("auction_" ++ integer_to_list(AuctionID)), self()),
   idle_loop(AuctionID).
 
-%% Idle loop: waits for an item to load
+%%waits for an item to load
 idle_loop(AuctionID) ->
   receive
     {load_item, ItemId, ItemName, StartingPrice, Duration} ->
@@ -60,7 +59,7 @@ idle_loop(AuctionID) ->
   end.
 
 
-%% main Loop - to receive and handle messages
+%%main Loop - to receive and handle messages
 
 loop(State) ->
   receive
@@ -73,8 +72,6 @@ loop(State) ->
           handle_winner(State); %% Auction ended go to handle_winner
         true ->
           erlang:send_after(1000, self(), clock),  %% Continue countdown
-
-          %% Log every 30 seconds can be removed later
           if
             NewTime rem 30 =:= 0 ->
               io:format("[AUCTION ~p] ~p seconds remaining~n",
@@ -86,13 +83,13 @@ loop(State) ->
           loop(State#state{time_remaining = NewTime})
       end;
 
-  %% BID - handle incoming bid
+  %%handle incoming bid
 
     {ClientPid, bid, UserId, Amount, UserName} ->
       NewState = handle_bid(State, ClientPid, UserId, Amount, UserName),
       loop(NewState);
 
-  %% GET STATUS - return current auction state
+  %%return current auction state
 
     {get_status, ClientPid} ->
       Status = #{
@@ -106,30 +103,28 @@ loop(State) ->
       ClientPid ! {status, Status},
       loop(State);
 
-  %% GET HISTORY - Return bid history
+  %%Return bid history
 
     {get_history, ClientPid} ->
       ClientPid ! {history, lists:reverse(State#state.bids_history)},
       loop(State);
 
-  %% time synchronization using Cristian's algorithm
     {get_time, ClientPid} ->
       ServerTime = erlang:system_time(millisecond),
       ClientPid ! {time_response, ServerTime},
       loop(State);
 
     {'$gen_call', {From, MRef}, get_remaining_time} ->
-      %% Dobbiamo rispondere con il formato che gen_server si aspetta: {MRef, Risposta}
       From ! {MRef, State#state.time_remaining},
       loop(State);
 
-  %% UNKNOWN MESSAGE - ignore and continue loop
+  %%UNKNOWN MESSAGE - ignore and continue loop
     _Other ->
       loop(State)
 
   end.
 
-%% Handle Bid - Validates and processes a bid
+%%Validates and processes a bid
 handle_bid(State, ClientPid, UserId, Amount, UserName) ->
   AuctionID = State#state.auction_id,
   CurrentBid = State#state.current_bid,
@@ -137,33 +132,30 @@ handle_bid(State, ClientPid, UserId, Amount, UserName) ->
   TimeRemaining = State#state.time_remaining,
 
   if
-  %% Case 1: Auction ended
+  %%Case 1: Auction ended
     TimeRemaining =< 0 ->
       io:format("[AUCTION ~p] Bid rejected for ~s: auction ended~n", [AuctionID, UserName]),
-      %% Notify Java of the rejection using the Name
       {?JAVA_MAILBOX, ?JAVA_NODE} ! {bid_rejected, AuctionID, UserName, auction_ended},
       ClientPid ! {bid_rejected, auction_ended},
       State;
 
-  %% Case 2: Bid too low
+  %%Case 2: Bid too low
     Amount =< CurrentBid ->
       io:format("[AUCTION ~p] Bid rejected for ~s: ~p not higher than ~p~n", [AuctionID, UserName, Amount, CurrentBid]),
       {?JAVA_MAILBOX, ?JAVA_NODE} ! {bid_rejected, AuctionID, UserName, bid_too_low},
       ClientPid ! {bid_rejected, bid_too_low},
       State;
 
-  %% Case 3: Consecutive bids from the same user
+  %%Case 3: Consecutive bids from the same user
     UserId =:= HighBidder ->
       io:format("[AUCTION ~p] Bid rejected: ~s cannot bid consecutively~n", [AuctionID, UserName]),
       {?JAVA_MAILBOX, ?JAVA_NODE} ! {bid_rejected, AuctionID, UserName, consecutive_bid},
       ClientPid ! {bid_rejected, consecutive_bid_not_allowed},
       State;
 
-  %% Case 4: Bid ACCEPTED
+  %%Case 4: Bid ACCEPTED
     true ->
       io:format("[AUCTION ~p] Bid ACCEPTED: ~p by user ~s~n", [AuctionID, Amount, UserName]),
-
-      %% Notify Java of the successful bid (Java will use this to update the UI)
       {?JAVA_MAILBOX, ?JAVA_NODE} ! {new_bid, AuctionID, Amount, UserName},
 
       %% Record bid in history with the name
@@ -176,7 +168,7 @@ handle_bid(State, ClientPid, UserId, Amount, UserName) ->
       },
       NewHistory = [BidRecord | State#state.bids_history],
 
-      %% Check if we need to extend time
+      %%Check if we need to extend time
       ExtendThreshold = State#state.extend_threshold,
       NewTime = if
                   TimeRemaining =< ExtendThreshold ->
@@ -186,11 +178,8 @@ handle_bid(State, ClientPid, UserId, Amount, UserName) ->
                   true ->
                     TimeRemaining
                 end,
+      ClientPid ! {bid_accepted, Amount, NewTime}, %success message
 
-      %% Send success response to local Erlang bidder
-      ClientPid ! {bid_accepted, Amount, NewTime},
-
-      %% Return updated state including the high_bidder_name
       State#state{
         current_bid = Amount,
         high_bidder = UserId,
@@ -200,32 +189,19 @@ handle_bid(State, ClientPid, UserId, Amount, UserName) ->
       }
   end.
 
-%% Handle Winner - called when the auction timer reaches 0
+%%Handle Winner - called when the auction timer reaches 0
 handle_winner(State) ->
   AuctionID = State#state.auction_id,
   Winner = State#state.high_bidder,
   FinalPrice = State#state.current_bid,
   ItemName = State#state.item_name,
- % UserName = State#state.high_bidder_name,
 
-  %% Format winner for Java compatibility
-%%  {JavaWinner, WinnerName} = if
-%%                               Winner == none ->
-%%                                 {"no_winner", "No winner available"};
-%%                               true ->
-%%                                 {Winner, UserName}
-%%                             end,
-
-
-  %% 1. Identify and stop the associated chat process
   ChatName = list_to_atom("chat_" ++ integer_to_list(AuctionID)),
   case whereis(ChatName) of
     undefined -> ok;
     ChatPid -> ChatPid ! stop
   end,
 
-  %% 2. Notify the Java listener about the auction results
-%%  {java_listener, 'java_node@127.0.0.1'} ! {auction_closed, AuctionID, JavaWinner, WinnerName, FinalPrice},
   case Winner of
     none ->
       %% no bids - items will go back to pending
@@ -237,27 +213,12 @@ handle_winner(State) ->
                                   Winner when is_atom(Winner) -> {list_to_binary(atom_to_list(Winner)), State#state.high_bidder_name};
                                   Winner -> {list_to_binary(io_lib:format("~p", [Winner])), State#state.high_bidder_name}
                                 end,
-      %% Sold - notify java with winner and price
       {?JAVA_MAILBOX, ?JAVA_NODE} ! {auction_closed, State#state.item_id, JavaWinner, WinnerName, FinalPrice},
       io:format("[AUCTION ~p] SOLD! ~s for ~p to ~s~n",
         [AuctionID, ItemName, FinalPrice, State#state.high_bidder_name])
       end,
-%%  %% 3. Print auction summary to the console
-%%  io:format("~n========================================~n"),
-%%  case Winner of
-%%    none ->
-%%      io:format("[AUCTION ~p] ENDED - NO BIDS~n", [AuctionID]),
-%%      io:format("Item '~s' received no bids.~n", [ItemName]);
-%%    _ ->
-%%      io:format("[AUCTION ~p] ENDED - SOLD!~n", [AuctionID]),
-%%      io:format("Item: '~s'~n", [ItemName]),
-%%      io:format("Winner: User ~p~n", [Winner]),
-%%      io:format("Final Price: ~p~n", [FinalPrice]),
-%%      io:format("Total Bids: ~p~n", [length(State#state.bids_history)])
-%%  end,
-%%  io:format("========================================~n~n"),
 
-  %% 4. Notify the Manager that the auction logic is finished
+  %%Notify the Manager that the auction logic is finished
   case whereis('DS_auction_manager') of
     undefined -> ok;
     ManagerPid -> case Winner of
@@ -266,27 +227,16 @@ handle_winner(State) ->
                   end
   end,
 
-  %% 5. Unregister the process name to allow reuse of the ID later
+  %%Unregister the process name to allow reuse of the ID later
   catch unregister(list_to_atom("auction_" ++ integer_to_list(AuctionID))),
 
-  %% 6. TERMINATE the process
-  %% This triggers the 'DOWN' message in DS_auction_manager,
-  %% which immediately triggers the request for new auctions.
+  %% TERMINATE the process
+
   io:format("[AUCTION ~p] Cleaning up process and freeing slot...~n", [AuctionID]),
   exit(normal).
 
 
-%% CRISTIAN'S ALGORITHM - Time Synchronization
-
-%% Algorithm:
-%%   1. Client records T1 (local time before request)
-%%   2. Client sends {get_time, self()} to auction process
-%%   3. Server responds with {time_response, ServerTime}
-%%   4. Client records T2 (local time after response)
-%%   5. RTT = T2 - T1
-%%   6. Offset = ServerTime + (RTT / 2) - T2
-
-%% Get raw  server time from auction process
+%%Get raw  server time from auction process
 get_server_time(AuctionID) ->
   get_server_time(AuctionID, node()).
 
@@ -301,13 +251,12 @@ get_server_time(AuctionID, Node) ->
     {error, timeout}
   end.
 
-% synchronize local time with server time using Cristian's algorithm
-
+%synchronize local time with server time using Cristian's algorithm
 % sync with local auction (same node)
 sync_time(AuctionID) ->
   sync_time(AuctionID, node()).
 
-% sync with remote auction (across nodes)
+%sync with remote auction (across nodes)
 sync_time(AuctionID, Node) ->
   AuctionName = list_to_atom("auction_" ++ integer_to_list(AuctionID)),
   T1 = erlang:system_time(millisecond),

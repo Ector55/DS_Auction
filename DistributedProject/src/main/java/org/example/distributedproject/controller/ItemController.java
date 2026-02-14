@@ -43,6 +43,4 @@ public class ItemController {
         return ResponseEntity.ok(item1);
     }
 
-
-
 }

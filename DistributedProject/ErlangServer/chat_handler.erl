@@ -7,7 +7,7 @@
 -define(JAVA_NODE, 'java_node@127.0.0.1').
 -define(JAVA_MAILBOX, 'java_listener').
 
-%% Starts the chat process for a specific auction.
+%%Starts the chat process for a specific auction.
 start(AuctionID) ->
   Name = list_to_atom("chat_" ++ integer_to_list(AuctionID)),
 
@@ -23,19 +23,19 @@ start(AuctionID) ->
 
 loop(AuctionID, Participants) ->
   receive
-  %% A user joins the auction chat from an Erlang terminal
+  %%A user joins the auction chat from an Erlang terminal
     {join, ClientPid} ->
       io:format("[CHAT ~p] New participant: ~p~n", [AuctionID, ClientPid]),
       erlang:monitor(process, ClientPid),
       loop(AuctionID, [ClientPid | Participants]);
 
-  %% A user sends a message
+  %%user sends a message
     {post_message, FromUser, Content} ->
       %% show message on erlang console
       io:format("[CHAT ~p] ~s: ~s~n", [AuctionID, FromUser, Content]),
       Timestamp = erlang:system_time(second),
 
-      %% 1. BROADCAST to Erlang participants (Other terminals)
+      %%BROADCAST to Erlang participants (Other terminals)
       Message = #{
         auction_id => AuctionID,
         user => FromUser,
@@ -44,8 +44,8 @@ loop(AuctionID, Participants) ->
       },
       lists:foreach(fun(Pid) -> Pid ! {chat_msg, Message} end, Participants),
 
-      %% 2. NOTIFY JAVA (To show messages on the Web Frontend)
-      %% Protocol: {chat_msg, AuctionID, User, Content}
+      %%NOTIFY JAVA (To show messages on the Web Frontend)
+      %%Protocol: {chat_msg, AuctionID, User, Content}
       {?JAVA_MAILBOX, ?JAVA_NODE} ! {chat_msg, AuctionID, FromUser, Content},
 
       loop(AuctionID, Participants);

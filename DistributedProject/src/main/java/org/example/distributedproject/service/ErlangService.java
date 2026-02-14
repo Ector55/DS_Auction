@@ -32,8 +32,8 @@ public class ErlangService {
     private OtpMbox mainMbox;
 
     private final String erlangNodeName = "java_node@127.0.0.1";
-    private final String erlangServerNode = "auction_service@127.0.0.1"; // Replace with your manager node name
-    private final String cookie = "mypassword"; // Must match Erlang -setcookie
+    private final String erlangServerNode = "auction_service@127.0.0.1";
+    private final String cookie = "mypassword";
 
     @PostConstruct
     public void init() throws IOException {
@@ -63,14 +63,12 @@ public class ErlangService {
         }
     }
 
-
     public String placeBid(Long auctionId, Double amount) {
         OtpMbox tempMbox = null;
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         String username = auth.getName();
         User user = userService.findByUserName(username);
         Long userId = user.getId();
-
         try {
             tempMbox = node.createMbox();
             String auctionProcessName = "auction_" + auctionId;
@@ -108,19 +106,16 @@ public class ErlangService {
             try {
                 OtpErlangObject msg = mainMbox.receive();
                 if (msg instanceof OtpErlangTuple tuple) {
-                    // 1. Handle Auction Manager requesting new items from DB
+                    //handle Auction Manager requesting new items from DB and so on
                     if (tuple.arity() == 4 && isAtom(tuple.elementAt(2), "get_next_auctions")) {
                         handleGetNextAuctions(tuple);
                     }
-                    // 2. Handle Chat Messages coming FROM Erlang terminals
                     else if (isAtom(tuple.elementAt(0), "chat_msg")) {
                         handleIncomingChatMessage(tuple);
                     }
-                    // 3. Handle Auction Completion i.e
                     else if (tuple.arity() == 5 &&isAtom(tuple.elementAt(0), "auction_closed")) {
                         handleAuctionClosed(tuple);
                     }
-                    // 4. Auction unsold (no bids)
                     else if (tuple.arity() == 2 && isAtom(tuple.elementAt(0), "auction_unsold")) {
                         handleAuctionUnsold(tuple);
                     }
@@ -138,7 +133,7 @@ public class ErlangService {
 //                    }
                 }
             } catch (OtpErlangException e) {
-                System.err.println("Erlang connection losy.");
+                System.err.println("Erlang connection lost.");
                 break;
             }
             catch (Exception e) {
@@ -148,13 +143,12 @@ public class ErlangService {
 
     }
 
-    // handle unsold items
+    //handle unsold items
     private void handleAuctionUnsold(OtpErlangTuple tuple) {
 
         try {
             Long itemId = ((OtpErlangLong) tuple.elementAt(1)).longValue();
-
-            // mark item as pending again so it can be re-auctioned
+            //mark item as pending again so it can be re-auctioned
             itemService.markItemPending(itemId);
 
         } catch (Exception e) {
@@ -164,7 +158,7 @@ public class ErlangService {
 
     private void handleNewBid(OtpErlangTuple tuple) {
         try {
-            // {new_bid, AuctionId, NewPrice, BidderName}
+            //{new_bid, AuctionId, NewPrice, BidderName}
             String auctionId = tuple.elementAt(1).toString();
             Double price = extractDouble(tuple.elementAt(2));
             String bidderName = extractString(tuple.elementAt(3));
@@ -204,7 +198,7 @@ public class ErlangService {
 
     private void handleIncomingChatMessage(OtpErlangTuple tuple) {
         try {
-            // Expected tuple: {chat_msg, AuctionId, User, Text}
+            //expected tuple: {chat_msg, AuctionId, User, Text}
             String auctionId = tuple.elementAt(1).toString();
             String user = extractString(tuple.elementAt(2));
             String text = extractString(tuple.elementAt(3));
@@ -219,7 +213,7 @@ public class ErlangService {
 
     private void handleAuctionClosed(OtpErlangTuple tuple) {
         try {
-            // Expected: {auction_closed, AuctionId, JavaWinner, WinnderName, Price}
+            //tuple: {auction_closed, ItemId, JavaWinner, WinnderName, Price}
             Long itemId = ((OtpErlangLong) tuple.elementAt(1)).longValue();
             String winner = extractString(tuple.elementAt(2));
             String userName = extractString((tuple.elementAt(3)));
@@ -240,23 +234,12 @@ public class ErlangService {
             int requestedCount = ((OtpErlangLong) tuple.elementAt(3)).intValue();
             System.out.println("[JAVA] Requested " + requestedCount + " items");
 
-//            Item item = itemService.activateAndGetNextItem();
-//            System.out.println("+++ [ACTIVATING] Manager requested next item. Starting Auction #" + item.getId() + " (" + item.getName() + ")");
-//            OtpErlangList auctionList = (item != null) ?
-//                    new OtpErlangList(new OtpErlangTuple(new OtpErlangObject[]{
-//                            new OtpErlangLong(item.getId()), new OtpErlangString(item.getName()), new OtpErlangDouble(item.getStartingPrice())
-//                    })) : new OtpErlangList();
-//
-//            mainMbox.send(senderPid, new OtpErlangTuple(new OtpErlangObject[]{
-//                    msgId, new OtpErlangAtom("java_response"), auctionList
-//            }));
-
             if (requestedCount > 0) {
                 Item item = itemService.activateAndGetNextItem();
 
                 OtpErlangList auctionList;
                 if (item != null) {
-                    System.out.println("+++ [ACTIVATING] Manager requested next item. Starting Auction with Item #" + item.getId() + " (" + item.getName() + ") for next available slot");
+                    System.out.println("[ACTIVATING] Manager requested next item. Starting Auction with Item #" + item.getId() + " (" + item.getName() + ") for next available slot");
                     auctionList = new OtpErlangList(new OtpErlangTuple(new OtpErlangObject[]{
                             new OtpErlangLong(item.getId()),
                             new OtpErlangString(item.getName()),
@@ -308,21 +291,20 @@ public class ErlangService {
     public List<Auction> fetchActiveAuctionsFromErlang() {
         OtpMbox tempMbox = null;
         try {
-            tempMbox = node.createMbox(); // Create a temporary mailbox for the reply
+            tempMbox = node.createMbox(); //create a temporary mailbox for the reply
             OtpErlangObject[] request = new OtpErlangObject[]{
                     tempMbox.self(),
                     node.createRef(),
                     new OtpErlangAtom("get_active_auctions")
             };
 
-            // Send to the manager
+            //send to the manager
             tempMbox.send("DS_auction_manager", erlangServerNode, new OtpErlangTuple(request));
-            // Wait for reply (timeout 5 seconds)
-            OtpErlangObject response = tempMbox.receive(5000);
-            System.out.println("DEBUG: Risposta grezza da Erlang: " + response); // <--- AGGIUNGI QUESTO
+            OtpErlangObject response = tempMbox.receive(5000); //waiting for a reply
+            System.out.println("DEBUG: Raw Erlang response: " + response);
 
             if (response instanceof OtpErlangTuple respTuple) {
-                // Expected: {Ref, active_auctions_response, [List]}
+                //expected: {Ref, active_auctions_response, [List]}
                 OtpErlangAtom status = (OtpErlangAtom) respTuple.elementAt(1);
 
                 if ("active_auctions_response".equals(status.atomValue())) {
@@ -335,9 +317,8 @@ public class ErlangService {
         } finally {
             if (tempMbox != null) node.closeMbox(tempMbox);
         }
-        return new ArrayList<>(); // Return empty if failed
+        return new ArrayList<>();
     }
-
 
     private List<Auction> mapErlangListToAuctions(OtpErlangList erlangList) {
         List<Auction> result = new ArrayList<>();
@@ -345,20 +326,19 @@ public class ErlangService {
         for (OtpErlangObject obj : erlangList) {
             if (obj instanceof OtpErlangTuple auctionTuple) {
                 try {
-                    // La tupla ora è: {AuctionId, ItemId, TimeLeft}
+                    //tuple: {AuctionId, ItemId, TimeLeft}
                     Long auctionId = extractLong(auctionTuple.elementAt(0));
                     Long itemId = extractLong(auctionTuple.elementAt(1));
 
-                    // NUOVO: Estrai il tempo rimanente (3° elemento, indice 2)
+                  //extracting remaining time
                     Long timeLeft = extractLong(auctionTuple.elementAt(2));
-
                     Item item = itemService.getItemById(itemId);
 
                     if (item != null) {
                         Auction auction = new Auction(
                                 auctionId,
                                 item,
-                                timeLeft, // <--- Qui usiamo il tempo vero ricevuto da Erlang
+                                timeLeft, //Time received from erlang
                                 item.getStartingPrice(),
                                 null
                         );

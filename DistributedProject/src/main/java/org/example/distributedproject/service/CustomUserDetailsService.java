@@ -23,7 +23,6 @@ public class CustomUserDetailsService implements UserDetailsService {
                 .findFirst()
                 .orElseThrow(() -> new UsernameNotFoundException("User not found: " + usernameInput));
 
-        // Costruiamo l'utente per Spring
         return new org.springframework.security.core.userdetails.User(
                 user.getUserName(),  // username is the unique ID
                 user.getPassword(),

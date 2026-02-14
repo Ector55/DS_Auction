@@ -1,6 +1,5 @@
 package org.example.distributedproject.service;
 
-
 import jakarta.transaction.Transactional;
 import org.example.distributedproject.model.Item;
 import org.example.distributedproject.repository.ItemRepository;
@@ -61,8 +60,6 @@ public class ItemService {
                 Item saved = itemRepository.saveAndFlush(item);
 
                 //itemRepository.save(item);
-
-
                 System.out.println("Item " + itemId + " marked as PENDING (will be re-auctioned)");
             } else {
                 System.err.println(" Item " + itemId + " not found!");
@@ -70,10 +67,9 @@ public class ItemService {
         }  catch (Exception e) {
             System.err.println(" ERROR marking item as PENDING:");
 
-            throw new RuntimeException(e);  // Force rollback to see errors
+            throw new RuntimeException(e);
         }
     }
-
 
     @Transactional
     public Item activateAndGetNextItem() {
@@ -81,20 +77,18 @@ public class ItemService {
         if (itemOpt.isPresent()) {
             Item item = itemOpt.get();
             item.setStatus("ACTIVE");
-            return itemRepository.save(item); // Ritorna l'oggetto aggiornato
-            //mettere che viene venduto quando finisce l'asta e back to pending if not sold
+            return itemRepository.save(item); //updated object
         }
-        return null; // Nessun item disponibile
+        return null; //no items available
     }
 
     @Transactional
     public void closeItem(Long itemId, String winner, Double price) {
         Item item = itemRepository.findById(itemId).orElse(null);
         if (item != null) {
-            item.setStatus("SOLD"); // Cambiando in SOLD, activateAndGetNextItem non lo riprenderà
-            // Opzionale: salva il vincitore e il prezzo se hai i campi nel model Item
+            item.setStatus("SOLD");
             itemRepository.save(item);
-            System.out.println("✅ Item " + itemId + " segnato come SOLD nel DB.");
+            System.out.println("Item " + itemId + " marked as SOLD in the DB");
         }
     }
 
