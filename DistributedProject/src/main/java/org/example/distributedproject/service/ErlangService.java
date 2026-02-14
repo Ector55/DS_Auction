@@ -26,6 +26,9 @@ public class ErlangService {
     private UserService userService;
 
     @Autowired
+    private AuctionBidService auctionBidService;
+
+    @Autowired
     private SimpMessagingTemplate messagingTemplate;
 
     private OtpNode node;
@@ -87,7 +90,7 @@ public class ErlangService {
                 String status = ((OtpErlangAtom) respTuple.elementAt(0)).atomValue();
 
                 if ("bid_accepted".equals(status)) {
-                    return "SUCCESS: Bid accepted.";
+                    return "bid_accepted";
                 } else if ("bid_rejected".equals(status)) {
                     String reason = ((OtpErlangAtom) respTuple.elementAt(1)).atomValue();
                     return "ERROR: " + reason.replace("_", " ");
@@ -290,6 +293,7 @@ public class ErlangService {
 
     public List<Auction> fetchActiveAuctionsFromErlang() {
         OtpMbox tempMbox = null;
+        OtpErlangList auctionList = null;
         try {
             tempMbox = node.createMbox(); //create a temporary mailbox for the reply
             OtpErlangObject[] request = new OtpErlangObject[]{
@@ -308,8 +312,12 @@ public class ErlangService {
                 OtpErlangAtom status = (OtpErlangAtom) respTuple.elementAt(1);
 
                 if ("active_auctions_response".equals(status.atomValue())) {
-                    OtpErlangList auctionList = (OtpErlangList) respTuple.elementAt(2);
-                    return mapErlangListToAuctions(auctionList);
+                    auctionList = (OtpErlangList) respTuple.elementAt(2);
+                    List<Auction> auctions = mapErlangListToAuctions(auctionList);
+
+                    auctionBidService.syncWithErlangState(auctions);
+
+                    return auctions;
                 }
             }
         } catch (Exception e) {
@@ -340,7 +348,9 @@ public class ErlangService {
                                 item,
                                 timeLeft, //Time received from erlang
                                 item.getStartingPrice(),
-                                null
+                                null,
+                                new ArrayList<>(),
+                                new ArrayList<>()
                         );
                         result.add(auction);
                     }
