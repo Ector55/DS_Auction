@@ -31,12 +31,8 @@ public class AuctionController {
     //Endpoint to finalize an auction.
     @PostMapping("/close")
     public void closeAuction(@RequestParam Long itemId, @RequestBody String winner, @RequestBody Double price) {
-
         System.out.println("Erlang closed auction " + itemId + ". Winner: " + winner + " Price: " + price);
-
-        // Retrieve the item from the database using the provided ID.
         Item item = itemRepository.findById(itemId).orElse(null);
-
         //If the item exists in the database, update its status
         if (item != null) {
             item.setStatus("SOLD");
@@ -47,14 +43,10 @@ public class AuctionController {
     @PostMapping("/{id}/bid")
     public ResponseEntity<?> bid(@PathVariable Long id, @RequestBody Double amount) {
         String currentUser = SecurityContextHolder.getContext().getAuthentication().getName();
-
         try {
             String response = erlangService.placeBid(id, amount);
-
             if ("bid_accepted".equals(response)) {
-                // ✅ Aggiorna la chat IN MEMORIA (persiste finché l'asta non viene sovrascritta)
                 auctionBidService.addBidMessage(id, currentUser, amount);
-
                 return ResponseEntity.ok(Map.of(
                         "status", "success",
                         "message", currentUser + " offered " + String.format("%.2f", amount)
@@ -70,14 +62,9 @@ public class AuctionController {
   //Endpoint to handle sending chat messages within a specific auction.
     @PostMapping("/{id}/chat")
     public ResponseEntity<?> postChatMessage(@PathVariable int id, @RequestBody String message) {
-        //Retrieve the currently authenticated username
         String currentUser = SecurityContextHolder.getContext().getAuthentication().getName();
-
-        // Send the message to the specific auction's 'chat_handler' process on the Erlang node.
         erlangService.sendChatMessage(id, currentUser, message);
-
-        //HTTP 200 OK
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok().build(); //200 OK message
     }
 
     @GetMapping("/active")

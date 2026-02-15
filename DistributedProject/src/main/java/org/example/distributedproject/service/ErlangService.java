@@ -148,12 +148,10 @@ public class ErlangService {
 
     //handle unsold items
     private void handleAuctionUnsold(OtpErlangTuple tuple) {
-
         try {
             Long itemId = ((OtpErlangLong) tuple.elementAt(1)).longValue();
             //mark item as pending again so it can be re-auctioned
             itemService.markItemPending(itemId);
-
         } catch (Exception e) {
             System.err.println("Error in processing auction_unsold: " + e.getMessage());
         }
@@ -201,13 +199,19 @@ public class ErlangService {
 
     private void handleIncomingChatMessage(OtpErlangTuple tuple) {
         try {
-            //expected tuple: {chat_msg, AuctionId, User, Text}
-            String auctionId = tuple.elementAt(1).toString();
+            // expected tuple: {chat_msg, AuctionId, User, Text}
+            String auctionIdStr = tuple.elementAt(1).toString();
+            // Parse ID as Long to ensure compatibility with Map keys
+            Long auctionId = Long.parseLong(auctionIdStr);
             String user = extractString(tuple.elementAt(2));
             String text = extractString(tuple.elementAt(3));
 
             System.out.println("Chat from Erlang [" + auctionId + "] " + user + ": " + text);
 
+            // 1. SAVE to history for future retrievals
+            auctionBidService.addChatMessage(auctionId, user, text);
+
+            // 2. BROADCAST to current subscribers via WebSocket
             messagingTemplate.convertAndSend("/topic/auction/" + auctionId, new ChatMessageDto(user, text));
         } catch (Exception e) {
             System.err.println("Error parsing chat msg: " + e.getMessage());
@@ -239,7 +243,6 @@ public class ErlangService {
 
             if (requestedCount > 0) {
                 Item item = itemService.activateAndGetNextItem();
-
                 OtpErlangList auctionList;
                 if (item != null) {
                     System.out.println("[ACTIVATING] Manager requested next item. Starting Auction with Item #" + item.getId() + " (" + item.getName() + ") for next available slot");
@@ -301,7 +304,6 @@ public class ErlangService {
                     node.createRef(),
                     new OtpErlangAtom("get_active_auctions")
             };
-
             //send to the manager
             tempMbox.send("DS_auction_manager", erlangServerNode, new OtpErlangTuple(request));
             OtpErlangObject response = tempMbox.receive(5000); //waiting for a reply
@@ -314,9 +316,7 @@ public class ErlangService {
                 if ("active_auctions_response".equals(status.atomValue())) {
                     auctionList = (OtpErlangList) respTuple.elementAt(2);
                     List<Auction> auctions = mapErlangListToAuctions(auctionList);
-
                     auctionBidService.syncWithErlangState(auctions);
-
                     return auctions;
                 }
             }
@@ -337,8 +337,7 @@ public class ErlangService {
                     //tuple: {AuctionId, ItemId, TimeLeft}
                     Long auctionId = extractLong(auctionTuple.elementAt(0));
                     Long itemId = extractLong(auctionTuple.elementAt(1));
-
-                  //extracting remaining time
+                    //extracting remaining time
                     Long timeLeft = extractLong(auctionTuple.elementAt(2));
                     Item item = itemService.getItemById(itemId);
 
