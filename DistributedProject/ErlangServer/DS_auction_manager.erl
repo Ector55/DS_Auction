@@ -137,7 +137,7 @@ start_permanent_slots() ->
         io:format("[MANAGER] Auction ~p SPAWNED on REMOTE WORKER ~p (Pid: ~p)~n", [AuctionId, ?WORKER_NODE, Pid]);
 
       ExistingPid ->
-        io:format("[MANAGER] Auction ~p already running on ~p~n", [AuctionId, ?WORKER_NODE])
+        io:format("[MANAGER] Auction ~p already running on ~p (Pid: ~p)~n", [AuctionId, ?WORKER_NODE, ExistingPid])
     end
                 end, [1,2,3]).
 
