@@ -16,6 +16,7 @@
 -export([get_server_time/1, get_server_time/2, sync_time/1, sync_time/2]).
 
 -define(JAVA_NODE, 'java_node@10.2.1.25').
+-define(MANAGER_NODE, 'auction_service@10.2.1.48').
 -define(JAVA_MAILBOX, 'java_listener').
 
 %%State record
@@ -219,13 +220,12 @@ handle_winner(State) ->
       end,
 
   %%Notify the Manager that the auction logic is finished
-  case whereis('DS_auction_manager') of
-    undefined -> ok;
-    ManagerPid -> case Winner of
-                    none ->ManagerPid ! {auction_ended, AuctionID, State#state.item_id, no_bids};
-                    _ -> ManagerPid ! {auction_ended, AuctionID, State#state.item_id, {sold, Winner, FinalPrice}}
-                  end
-  end,
+  { 'DS_auction_manager', ?MANAGER_NODE } ! {auction_ended, AuctionID, State#state.item_id,
+    case Winner of
+      none -> no_bids;
+      _ -> {sold, Winner, FinalPrice}
+    end
+  },
 
   %%Unregister the process name to allow reuse of the ID later
   catch unregister(list_to_atom("auction_" ++ integer_to_list(AuctionID))),
