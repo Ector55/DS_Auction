@@ -34,8 +34,8 @@ public class ErlangService {
     private OtpNode node;
     private OtpMbox mainMbox;
 
-    private final String erlangNodeName = "java_node@127.0.0.1";
-    private final String erlangServerNode = "auction_service@127.0.0.1";
+    private final String erlangNodeName = "java_node@10.2.1.25";
+    private final String erlangServerNode = "auction_service@10.2.1.48";
     private final String cookie = "mypassword";
 
     @PostConstruct
