@@ -15,7 +15,7 @@
 
 -export([get_server_time/1, get_server_time/2, sync_time/1, sync_time/2]).
 
--define(JAVA_NODE, 'java_node@127.0.0.1').
+-define(JAVA_NODE, 'java_node@10.2.1.25').
 -define(JAVA_MAILBOX, 'java_listener').
 
 %%State record

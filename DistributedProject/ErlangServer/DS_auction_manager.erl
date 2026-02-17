@@ -15,7 +15,8 @@
 %% GenServer Callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--define(JAVA_NODE, 'java_node@127.0.0.1').
+-define(JAVA_NODE, 'java_node@10.2.1.25'). %java responds
+-define(WORKER_NODE, 'worker@10.2.1.13'). %where the auctions work
 -define(JAVA_MAILBOX, 'java_listener').
 -define(POLL_INTERVAL, 5000).
 
@@ -61,8 +62,8 @@ handle_info({auction_ended, AuctionId, ItemId, Result}, State) ->
 
   NewSlots = maps:remove(AuctionId, State#state.active_slots),
 
-  NewPid = spawn(fun() -> 'DS_auction_handler':start(AuctionId) end),
-  timer:sleep(50),  %% wait for it to register
+  NewPid = spawn(?WORKER_NODE, 'DS_auction_handler', start, [AuctionId]),  timer:sleep(50),  %% wait for it to register
+  timer:sleep(50),
   'DS_auction_monitor':monitor_auction(NewPid, AuctionId),
   io:format("[MANAGER] Started new idle auction ~p (Pid: ~p)~n", [AuctionId, NewPid]),
 
@@ -92,8 +93,7 @@ handle_info({'DOWN', _Ref, process, Pid, Reason}, State) ->
           %% remove from active
           NewSlots = maps:remove(AuctionId, State#state.active_slots),
           %%restart the slot
-          NewPid = spawn(fun() -> 'DS_auction_handler':start(AuctionId) end),
-
+          NewPid = spawn(?WORKER_NODE, 'DS_auction_handler', start, [AuctionId]),
           timer:sleep(50),
           'DS_auction_monitor':monitor_auction(NewPid,AuctionId),
 
@@ -129,13 +129,15 @@ handle_info(Info, State) ->
 start_permanent_slots() ->
   lists:foreach(fun(AuctionId) ->
     AuctionName = list_to_atom("auction_" ++ integer_to_list(AuctionId)),
-    case whereis(AuctionName) of
+    case rpc:call(?WORKER_NODE, erlang, whereis, [AuctionName]) of
       undefined ->
-        Pid = spawn(fun() -> 'DS_auction_handler':start(AuctionId) end),
-        'DS_auction_monitor':monitor_auction(Pid,AuctionId),
-        io:format("[MANAGER] Auction ~p started (Pid: ~p)~n", [AuctionId,Pid]);
+        Pid = spawn(?WORKER_NODE, 'DS_auction_handler', start, [AuctionId]),
+
+        'DS_auction_monitor':monitor_auction(Pid, AuctionId),
+        io:format("[MANAGER] Auction ~p SPAWNED on REMOTE WORKER ~p (Pid: ~p)~n", [AuctionId, ?WORKER_NODE, Pid]);
+
       ExistingPid ->
-        io:format("[MANAGER] Auction ~p exists (Pid: ~p)~n", [AuctionId,ExistingPid])
+        io:format("[MANAGER] Auction ~p already running on ~p~n", [AuctionId, ?WORKER_NODE])
     end
                 end, [1,2,3]).
 
@@ -152,16 +154,17 @@ load_items_into_slots(_Items, [], State) ->
   State;
 load_items_into_slots([{ItemId, Name, Price} | RestItems], [AuctionId | RestSlots], State) ->
   AuctionName = list_to_atom("auction_" ++ integer_to_list(AuctionId)),
-  Duration = 100, %%duration of the auctions
-  case whereis(AuctionName) of
+  Duration = 300, %%duration of the auctions
+
+  case rpc:call(?WORKER_NODE, erlang, whereis, [AuctionName]) of
     undefined ->
-      io:format("[MANAGER] Error: Auction slot ~p not found!~n", [AuctionId]),
+      io:format("[MANAGER] Error: Auction slot ~p not found on worker!~n", [AuctionId]),
       load_items_into_slots(RestItems,RestSlots, State);
     Pid ->
       io:format("[MANAGER] Loading Item#~p '~s' into auction ~p~n", [ItemId, Name, AuctionId]),
       Pid ! {load_item, ItemId, Name, Price, Duration},
 
-      spawn(fun() -> chat_handler:start(AuctionId) end),
+      spawn(?WORKER_NODE, chat_handler, start, [AuctionId]),
 
       NewSlots = maps:put(AuctionId,{Pid,ItemId}, State#state.active_slots),
       load_items_into_slots(RestItems, RestSlots, State#state{active_slots = NewSlots})
