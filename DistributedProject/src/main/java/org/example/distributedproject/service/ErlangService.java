@@ -36,6 +36,7 @@ public class ErlangService {
 
     private final String erlangNodeName = "java_node@10.2.1.25";
     private final String erlangServerNode = "auction_service@10.2.1.48";
+    private final String erlangWorkerNode = "worker@10.2.1.13";
     private final String cookie = "mypassword";
 
     @PostConstruct
@@ -59,8 +60,7 @@ public class ErlangService {
                     new OtpErlangString(user),
                     new OtpErlangString(message)
             };
-            mainMbox.send(chatProcessName, erlangServerNode, new OtpErlangTuple(msgPayload));
-            System.out.println("Chat message sent to " + chatProcessName + "@" + erlangServerNode);
+            mainMbox.send(chatProcessName, erlangWorkerNode, new OtpErlangTuple(msgPayload));            System.out.println("Chat message sent to " + chatProcessName + "@" + erlangServerNode);
         } catch (Exception e) {
             System.err.println("Error sending chat to Erlang: " + e.getMessage());
         }
@@ -83,7 +83,7 @@ public class ErlangService {
                     new OtpErlangDouble(amount),
                     new OtpErlangString(username)
             };
-            tempMbox.send(auctionProcessName, erlangServerNode, new OtpErlangTuple(payload));
+            tempMbox.send(auctionProcessName, erlangWorkerNode, new OtpErlangTuple(payload));
             OtpErlangObject response = tempMbox.receive(5000);
 
             if (response instanceof OtpErlangTuple respTuple) {

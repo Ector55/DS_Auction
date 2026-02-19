@@ -55,7 +55,18 @@ idle_loop(AuctionID) ->
         server_start_time = erlang:system_time(millisecond)
       },
       loop(InitialState);
+      {ClientPid, bid, _UserId, _Amount, UserName} ->
+      io:format("[AUCTION ~p] Bid rejected for ~s: auction not started yet~n", [AuctionID, UserName]),
+      {?JAVA_MAILBOX, ?JAVA_NODE} ! {bid_rejected, AuctionID, UserName, not_started},
+      ClientPid ! {bid_rejected, auction_not_started},
+      idle_loop(AuctionID);
+
+    {get_status, ClientPid} ->
+      ClientPid ! {status, #{status => not_started}},
+      idle_loop(AuctionID);
+
     _Other ->
+      io:format("[AUCTION ~p] Ignored unexpected message in idle_loop: ~p~n", [AuctionID, _Other]),
       idle_loop(AuctionID)
   end.
 
