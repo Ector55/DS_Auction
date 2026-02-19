@@ -7,6 +7,9 @@ public class Auction {
     private Long id;
     private Item item;
     private Long duration;
+    private Long timeRemaining;
+    private Double currentBid;
+    private String highBidder;
     private Double startingPrice;
     private User winner;
     private List<String> chatHistory;
@@ -26,6 +29,30 @@ public class Auction {
 
     public void setItem(Item item) {
         this.item = item;
+    }
+
+    public Long getTimeRemaining() {
+        return timeRemaining;
+    }
+
+    public void setTimeRemaining(Long timeRemaining) {
+        this.timeRemaining = timeRemaining;
+    }
+
+    public Double getCurrentBid() {
+        return currentBid;
+    }
+
+    public void setCurrentBid(Double currentBid) {
+        this.currentBid = currentBid;
+    }
+
+    public String getHighBidder() {
+        return highBidder;
+    }
+
+    public void setHighBidder(String highBidder) {
+        this.highBidder = highBidder;
     }
 
     public Long getDuration() {

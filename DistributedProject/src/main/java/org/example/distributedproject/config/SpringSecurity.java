@@ -20,7 +20,7 @@ public class SpringSecurity {
                 .csrf(AbstractHttpConfigurer::disable) //necessary for POST from Postman/Erlang
                 .authorizeHttpRequests(auth -> auth
                         //Public Endpoint
-                        .requestMatchers("/api/users/register", "/api/items/next", "/api/auctions/close", "/api/items").permitAll()
+                        .requestMatchers("/api/users/register", "/api/items/next", "/api/auctions/close", "/api/items", "/api/auctions/*/time-sync").permitAll()
                         //request authentication
                         .anyRequest().authenticated()
                 )

@@ -10,6 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -47,14 +49,30 @@ public class AuctionController {
             String response = erlangService.placeBid(id, amount);
             if ("bid_accepted".equals(response)) {
                 auctionBidService.addBidMessage(id, currentUser, amount);
-                return ResponseEntity.ok(Map.of(
-                        "status", "success",
-                        "message", currentUser + " offered " + String.format("%.2f", amount)
-                ));
+                // Get updated status with synchronized time
+                Map<String, Object> status = erlangService.getAuctionStatus(id);
+
+                Map<String, Object> result = new HashMap<>();
+                result.put("status", "success");
+                result.put("message", currentUser + " offered " + String.format("%.2f", amount));
+                result.put("currentBid", amount);
+                result.put("highBidder", currentUser);
+                result.put("timeRemaining", status.get("timeRemaining"));
+                result.put("endTime", status.get("endTime"));
+                result.put("serverTime", status.get("serverTime"));
+                result.put("timeSync", status.get("timeSync"));
+
+                return ResponseEntity.ok(result);
             }
-            return ResponseEntity.badRequest().body("Bid rejected by auction system");
+            return ResponseEntity.badRequest().body(Map.of(
+                    "status", "error",
+                    "message", response
+            ));
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body("Bid processing failed");
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "status", "error",
+                    "message", "Bid processing failed"
+            ));
         }
     }
 
@@ -64,12 +82,63 @@ public class AuctionController {
     public ResponseEntity<?> postChatMessage(@PathVariable int id, @RequestBody String message) {
         String currentUser = SecurityContextHolder.getContext().getAuthentication().getName();
         erlangService.sendChatMessage(id, currentUser, message);
-        return ResponseEntity.ok().build(); //200 OK message
+        return ResponseEntity.ok(Map.of(
+                "status", "ok",
+                "message", "Chat sent",
+                "serverTime", erlangService.getAbsoluteServerTime()
+        ));
     }
 
     @GetMapping("/active")
     public ResponseEntity<List<Auction>> getActiveAuctions() {
-        return ResponseEntity.ok(erlangService.fetchActiveAuctionsFromErlang());
+        List<Auction> auctions = erlangService.fetchActiveAuctionsFromErlang();
+
+        List<Map<String, Object>> processedAuctions = new ArrayList<>();
+        long serverTime = erlangService.getAbsoluteServerTime();
+
+        for (Auction auction : auctions) {
+            Map<String, Object> auctionData = new HashMap<>();
+            auctionData.put("id", auction.getId());
+            auctionData.put("itemName", auction.getItem().getName());
+            auctionData.put("currentBid", auction.getCurrentBid());
+            auctionData.put("highBidder", auction.getHighBidder());
+
+            // Calculate absolute end time using synchronized server time
+            long timeRemaining = auction.getTimeRemaining();
+            long endTime = serverTime + (timeRemaining * 1000);
+
+            auctionData.put("timeRemaining", timeRemaining);
+            auctionData.put("endTime", endTime);
+            auctionData.put("serverTime", serverTime);
+
+            processedAuctions.add(auctionData);
+        }
+
+        return ResponseEntity.ok(Map.of(
+                "auctions", processedAuctions,
+                "serverTime", serverTime
+        ));
+        //return ResponseEntity.ok(erlangService.fetchActiveAuctionsFromErlang());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getAuction(@PathVariable Long id) {
+        Map<String, Object> status = erlangService.getAuctionStatus(id);
+
+        if (!status.isEmpty()) {
+            return ResponseEntity.ok(status);
+        }
+
+        return ResponseEntity.notFound().build();
+    }
+
+    @GetMapping("/{id}/time-sync")
+    public ResponseEntity<?> getAuctionTimeSync(@PathVariable Long id) {
+        Map<String, Object> syncInfo = erlangService.getAuctionSyncInfo(id);
+        if (syncInfo != null) {
+            return ResponseEntity.ok(syncInfo);
+        }
+        return ResponseEntity.status(500).body("Failed to synchronize with auction server");
     }
 
 }
