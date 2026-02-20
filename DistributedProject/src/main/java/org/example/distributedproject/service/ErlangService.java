@@ -15,16 +15,14 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 @Service
+@EnableScheduling
 public class ErlangService {
 
     @Autowired
@@ -52,7 +50,6 @@ public class ErlangService {
     // cache for time remaining
     private final Map<Long, Long> timeRemainingCache = new ConcurrentHashMap<>();
 
-
     private final String erlangNodeName = "java_node@10.2.1.25";
     private final String erlangServerNode = "auction_service@10.2.1.48";
     private final String erlangWorkerNode = "worker@10.2.1.13";
@@ -67,7 +64,6 @@ public class ErlangService {
         listenerThread.setDaemon(true);
         listenerThread.start();
 
-        // initialize cache cleanup executor
         initResync();
 
         System.out.println("Java Node Started: " + node.node());
@@ -82,7 +78,8 @@ public class ErlangService {
                     new OtpErlangString(user),
                     new OtpErlangString(message)
             };
-            mainMbox.send(chatProcessName, erlangWorkerNode, new OtpErlangTuple(msgPayload));            System.out.println("Chat message sent to " + chatProcessName + "@" + erlangServerNode);
+            mainMbox.send(chatProcessName, erlangWorkerNode, new OtpErlangTuple(msgPayload));
+            System.out.println("Chat message sent to " + chatProcessName + "@" + erlangServerNode);
         } catch (Exception e) {
             System.err.println("Error sending chat to Erlang: " + e.getMessage());
         }
@@ -95,7 +92,6 @@ public class ErlangService {
         User user = userService.findByUserName(username);
         Long userId = user.getId();
         try {
-            // sync with auction server before bidding
             Map<String, Object> SyncInfo = getAuctionSyncInfo(auctionId);
             if (SyncInfo == null) {
                 return "ERROR: Unable to synchronize with auction server. Please try again.";
@@ -122,9 +118,13 @@ public class ErlangService {
                 String status = ((OtpErlangAtom) respTuple.elementAt(0)).atomValue();
 
                 if ("bid_accepted".equals(status)) {
-                    // Force cache update
+                    // Update cache properly
                     timeRemainingCache.remove(auctionId);
-                    activeAuctionsCache.remove(auctionId);
+                    Auction cached = activeAuctionsCache.get(auctionId);
+                    if (cached != null) {
+                        cached.setCurrentBid(amount);
+                        cached.setHighBidder(username);
+                    }
                     return "bid_accepted";
                 } else if ("bid_rejected".equals(status)) {
                     String reason = ((OtpErlangAtom) respTuple.elementAt(1)).atomValue();
@@ -144,14 +144,13 @@ public class ErlangService {
             try {
                 OtpErlangObject msg = mainMbox.receive();
                 if (msg instanceof OtpErlangTuple tuple) {
-                    //handle Auction Manager requesting new items from DB and so on
                     if (tuple.arity() == 4 && isAtom(tuple.elementAt(2), "get_next_auctions")) {
                         handleGetNextAuctions(tuple);
                     }
                     else if (isAtom(tuple.elementAt(0), "chat_msg")) {
                         handleIncomingChatMessage(tuple);
                     }
-                    else if (tuple.arity() == 5 &&isAtom(tuple.elementAt(0), "auction_closed")) {
+                    else if (tuple.arity() == 5 && isAtom(tuple.elementAt(0), "auction_closed")) {
                         handleAuctionClosed(tuple);
                     }
                     else if (tuple.arity() == 2 && isAtom(tuple.elementAt(0), "auction_unsold")) {
@@ -160,12 +159,11 @@ public class ErlangService {
                     else if (isAtom(tuple.elementAt(0), "new_bid")) {
                         handleNewBid(tuple);
                     }
-
                     else if (isAtom(tuple.elementAt(0), "bid_rejected")){
                         handleBidRejected(tuple);
                     }
                     else if(isAtom(tuple.elementAt(0), "bid_accepted")){
-                        handleTimer(tuple);//
+                        handleTimer(tuple);
                     }
                 }
             } catch (OtpErlangException e) {
@@ -176,16 +174,12 @@ public class ErlangService {
                 System.err.println("Listener Error: " + e.getMessage());
             }
         }
-
     }
 
-    //handle unsold items
     private void handleAuctionUnsold(OtpErlangTuple tuple) {
         try {
             Long itemId = ((OtpErlangLong) tuple.elementAt(1)).longValue();
-            //mark item as pending again so it can be re-auctioned
             itemService.markItemPending(itemId);
-            // Clear caches
             activeAuctionsCache.clear();
             timeRemainingCache.clear();
         } catch (Exception e) {
@@ -195,23 +189,23 @@ public class ErlangService {
 
     private void handleNewBid(OtpErlangTuple tuple) {
         try {
-            //{new_bid, AuctionId, NewPrice, BidderName}
-            //String auctionId = tuple.elementAt(1).toString();
-            // use long for auctionID becuase cache keys are long and using string would require conversion all the time
-            Long auctionId = Long.parseLong(tuple.elementAt(1).toString());
+            Long auctionId = extractLong(tuple.elementAt(1));
             Double price = extractDouble(tuple.elementAt(2));
             String bidderName = extractString(tuple.elementAt(3));
 
-            // Invalidate caches
+            // Invalidate timer cache, update auction cache
             timeRemainingCache.remove(auctionId);
-            activeAuctionsCache.remove(auctionId);
+            Auction cached = activeAuctionsCache.get(auctionId);
+            if (cached != null) {
+                cached.setCurrentBid(price);
+                cached.setHighBidder(bidderName);
+            }
 
-            // Get synchronized time
             long serverTime = getAbsoluteServerTime();
             long timeRemaining = getTimeRemaining(auctionId);
             long endTime = serverTime + (timeRemaining * 1000);
 
-            // Broadcast bid update with synchronized time
+            // Unified WebSockets update
             Map<String, Object> update = new HashMap<>();
             update.put("type", "new_bid");
             update.put("price", price);
@@ -221,8 +215,7 @@ public class ErlangService {
             update.put("timeRemaining", timeRemaining);
             update.put("endTime", endTime);
 
-            messagingTemplate.convertAndSend("/topic/auction/" + auctionId + "/updates",
-                    new BidUpdateDto(price, bidderName));
+            messagingTemplate.convertAndSend("/topic/auction/" + auctionId + "/updates", Optional.of(update));
             System.out.println("New Bid for Auction [" + auctionId + "] - Bidder: " + bidderName + ", Amount: " + price);
         } catch (Exception e) {
             System.err.println("Error handling new_bid: " + e.getMessage());
@@ -231,7 +224,6 @@ public class ErlangService {
 
     private void handleBidRejected(OtpErlangTuple tuple) {
         try {
-            //String auctionId = tuple.elementAt(1).toString();
             Long auctionId = extractLong(tuple.elementAt(1));
             String user = extractString(tuple.elementAt(2));
             String reason = extractString(tuple.elementAt(3));
@@ -258,11 +250,13 @@ public class ErlangService {
             Double amount = extractDouble(tuple.elementAt(2));
             String bidderName = extractString(tuple.elementAt(3));
 
-            // Invalidate caches
             timeRemainingCache.remove(auctionId);
-            activeAuctionsCache.remove(auctionId);
+            Auction cached = activeAuctionsCache.get(auctionId);
+            if (cached != null) {
+                cached.setCurrentBid(amount);
+                cached.setHighBidder(bidderName);
+            }
 
-            // Get synchronized time
             long serverTime = getAbsoluteServerTime();
             long timeRemaining = getTimeRemaining(auctionId);
             long endTime = serverTime + (timeRemaining * 1000);
@@ -271,13 +265,13 @@ public class ErlangService {
             update.put("type", "timer_extended");
             update.put("auctionId", auctionId);
             update.put("bidder", bidderName);
-            update.put("amount", amount);
+            update.put("price", amount);
             update.put("serverTime", serverTime);
             update.put("timeRemaining", timeRemaining);
             update.put("endTime", endTime);
             update.put("message", "Timer extended by 30 seconds");
 
-            messagingTemplate.convertAndSend("/topic/auction/" + auctionId + "/updates",(Object) update);
+            messagingTemplate.convertAndSend("/topic/auction/" + auctionId + "/updates", Optional.of(update));
 
             System.out.println("Timer Extended for Auction " + auctionId + " by 30 seconds");
 
@@ -288,19 +282,15 @@ public class ErlangService {
 
     private void handleIncomingChatMessage(OtpErlangTuple tuple) {
         try {
-            // expected tuple: {chat_msg, AuctionId, User, Text}
             String auctionIdStr = tuple.elementAt(1).toString();
-            // Parse ID as Long to ensure compatibility with Map keys
             Long auctionId = Long.parseLong(auctionIdStr);
             String user = extractString(tuple.elementAt(2));
             String text = extractString(tuple.elementAt(3));
 
             System.out.println("Chat from Erlang [" + auctionId + "] " + user + ": " + text);
 
-            // SAVE to history for future retrievals
             auctionBidService.addChatMessage(auctionId, user, text);
 
-            // Broadcast with server time
             Map<String, Object> chatMsg = new HashMap<>();
             chatMsg.put("type", "chat");
             chatMsg.put("user", user);
@@ -308,7 +298,6 @@ public class ErlangService {
             chatMsg.put("auctionId", auctionId);
             chatMsg.put("serverTime", getAbsoluteServerTime());
 
-            // BROADCAST to current subscribers via WebSocket
             messagingTemplate.convertAndSend("/topic/auction/" + auctionId, new ChatMessageDto(user, text));
         } catch (Exception e) {
             System.err.println("Error parsing chat msg: " + e.getMessage());
@@ -317,14 +306,12 @@ public class ErlangService {
 
     private void handleAuctionClosed(OtpErlangTuple tuple) {
         try {
-            //tuple: {auction_closed, ItemId, JavaWinner, WinnderName, Price}
             Long itemId = ((OtpErlangLong) tuple.elementAt(1)).longValue();
             String winner = extractString(tuple.elementAt(2));
             String userName = extractString((tuple.elementAt(3)));
             Double price = ((OtpErlangDouble) tuple.elementAt(4)).doubleValue();
 
             itemService.closeItem(itemId, winner, price);
-            // Clear caches
             activeAuctionsCache.clear();
             timeRemainingCache.clear();
 
@@ -353,7 +340,6 @@ public class ErlangService {
                             new OtpErlangDouble(item.getStartingPrice())
                     }));
 
-                    // Clear caches when new item starts
                     activeAuctionsCache.clear();
                     timeRemainingCache.clear();
                 } else {
@@ -371,7 +357,6 @@ public class ErlangService {
         System.out.println("\n=== SYNC REQUEST for auction " + auctionId + " ===");
         OtpMbox tempMbox = null;
         try {
-            // Check node status
             System.out.println("Node status: " + (node != null ? node.node() : "null"));
             if (node == null) {
                 System.err.println("ERROR: Node is null!");
@@ -381,37 +366,28 @@ public class ErlangService {
             tempMbox = node.createMbox();
             String auctionProcessName = "auction_" + auctionId;
 
-            // T1: Client time before request
             long t1 = System.currentTimeMillis();
             System.out.println("T1 (client time vefore request): " + t1);
 
-            // Send request to Erlang
             OtpErlangObject[] msgPayload = new OtpErlangObject[]{
                     new OtpErlangAtom("get_time"), tempMbox.self()
             };
 
             OtpErlangTuple request = new OtpErlangTuple(msgPayload);
             tempMbox.send(auctionProcessName, erlangWorkerNode, request);
-            //new OtpErlangTuple(msgPayload));
 
-            // Wait for response from Erlang
             OtpErlangObject response = tempMbox.receive(5000);
 
-            // T2: Client time after response
             long t2 = System.currentTimeMillis();
             System.out.println("T2 (client receive time): " + t2);
 
             if (response instanceof OtpErlangTuple respTuple) {
-
-                // Check if it's the expected time_response tuple
                 if (respTuple.arity() == 2 &&
                         respTuple.elementAt(0) instanceof OtpErlangAtom &&
                         ((OtpErlangAtom) respTuple.elementAt(0)).atomValue().equals("time_response")) {
-                    // Extract server time from response
                     long serverTime = ((OtpErlangLong) respTuple.elementAt(1)).longValue();
                     System.out.println("Server time: " + serverTime);
 
-                    // Christian's Algorithm: Calculate RTT and offset
                     long rtt = t2 - t1;
                     long offset = serverTime + (rtt / 2) - t2;
 
@@ -425,7 +401,6 @@ public class ErlangService {
                             "auction_id", auctionId,
                             "sync_time", System.currentTimeMillis()
                     );
-
                 }
             }
         } catch (Exception e) {
@@ -433,25 +408,19 @@ public class ErlangService {
         } finally {
             if (tempMbox != null) {
                 node.closeMbox(tempMbox);
-
             }
         }
         return null;
     }
 
-    // gets or refreshes sync info for an auction, using cache if < 10 seconds old
     public Map<String, Object> getAuctionSyncInfo(Long auctionId) {
         Map<String, Object> cached = auctionSyncCache.get(auctionId);
-
-        // Use cache if less than 10 seconds old
         if (cached != null) {
             long syncTime = ((Number) cached.get("sync_time")).longValue();
             if (System.currentTimeMillis() - syncTime < 10000) {
                 return cached;
             }
         }
-
-        // Otherwise, perform new sync
         Map<String, Object> synced = synchronizeWithAuctionServer(auctionId);
         if (synced != null) {
             auctionSyncCache.put(auctionId, synced);
@@ -459,40 +428,27 @@ public class ErlangService {
         return synced;
     }
 
-    // gets current server time adjusted for clock offset, used for countdown timers
+    // FIX IMPORTANTE: Evita il blocco e timeout di 5 secondi se l'Asta 1 non esiste
     public long getAbsoluteServerTime() {
-        // tries with auction 1 first
-        Map<String, Object> syncInfo = getAuctionSyncInfo(1L);
-        if (syncInfo != null) {
-            long offset = ((Number) syncInfo.get("offset")).longValue();
-            return System.currentTimeMillis() + offset;
-        }
-
-        // Try with any auction in cache
         if (!auctionSyncCache.isEmpty()) {
             Map<String, Object> anySync = auctionSyncCache.values().iterator().next();
             long offset = ((Number) anySync.get("offset")).longValue();
             return System.currentTimeMillis() + offset;
         }
-
-        return System.currentTimeMillis(); // fallback to local time if sync fails
+        return System.currentTimeMillis();
     }
 
-    // gets auction's ending time
     public long getAuctionEndTime(Long auctionId) {
         long serverTime = getAbsoluteServerTime();
         long timeRemaining = getTimeRemaining(auctionId);
         return serverTime + (timeRemaining * 1000);
     }
 
-    // gets remainingg time
     public long getTimeRemaining(Long auctionId) {
-        // Try cache first
         Long cached = timeRemainingCache.get(auctionId);
         if (cached != null) {
             return cached;
         }
-        // Otherwise query Erlang
         OtpMbox tempMbox = null;
         try {
             tempMbox = node.createMbox();
@@ -519,23 +475,19 @@ public class ErlangService {
         return 0;
     }
 
-    // peridic timer broadcast
-    @Scheduled(fixedDelay = 1000) // Update every second
+    @Scheduled(fixedDelay = 1000)
     public void broadcastTimerUpdates() {
         List<Auction> auctions = fetchActiveAuctionsFromErlang();
 
         for (Auction auction : auctions) {
             Long auctionId = auction.getId();
 
-            // Get synchronized data using Christian's Algorithm
             long serverTime = getAbsoluteServerTime();
             long timeRemaining = auction.getTimeRemaining();
             long endTime = serverTime + (timeRemaining * 1000);
 
-            // Update cache
             timeRemainingCache.put(auctionId, timeRemaining);
 
-            // Broadcast timer update to all clients watching this auction
             Map<String, Object> timerUpdate = new HashMap<>();
             timerUpdate.put("type", "timer_update");
             timerUpdate.put("auctionId", auctionId);
@@ -545,11 +497,10 @@ public class ErlangService {
             timerUpdate.put("currentBid", auction.getCurrentBid());
             timerUpdate.put("highBidder", auction.getHighBidder());
 
-            messagingTemplate.convertAndSend("/topic/auction/" + auctionId + "/timer", (Object) timerUpdate);
+            messagingTemplate.convertAndSend("/topic/auction/" + auctionId + "/timer", Optional.of(timerUpdate));
         }
     }
 
-    // initializes a scheduled executor to clear old cache entries every 30 seconds
     private void initResync() {
         resyncExecutor = Executors.newScheduledThreadPool(1);
         resyncExecutor.scheduleAtFixedRate(() -> {
@@ -596,35 +547,29 @@ public class ErlangService {
     public record ChatMessageDto(String user, String message) {}
     public record BidUpdateDto(Double price, String bidder) {}
 
-
     public List<Auction> fetchActiveAuctionsFromErlang() {
-        // Check cache first
         if (!activeAuctionsCache.isEmpty()) {
             return new ArrayList<>(activeAuctionsCache.values());
         }
         OtpMbox tempMbox = null;
         OtpErlangList auctionList = null;
         try {
-            tempMbox = node.createMbox(); //create a temporary mailbox for the reply
+            tempMbox = node.createMbox();
             OtpErlangObject[] request = new OtpErlangObject[]{
                     tempMbox.self(),
                     node.createRef(),
                     new OtpErlangAtom("get_active_auctions")
             };
-            //send to the manager
             tempMbox.send("DS_auction_manager", erlangServerNode, new OtpErlangTuple(request));
-            OtpErlangObject response = tempMbox.receive(5000); //waiting for a reply
-            System.out.println("DEBUG: Raw Erlang response: " + response);
+            OtpErlangObject response = tempMbox.receive(5000);
 
             if (response instanceof OtpErlangTuple respTuple) {
-                //expected: {Ref, active_auctions_response, [List]}
                 OtpErlangAtom status = (OtpErlangAtom) respTuple.elementAt(1);
 
                 if ("active_auctions_response".equals(status.atomValue())) {
                     auctionList = (OtpErlangList) respTuple.elementAt(2);
                     List<Auction> auctions = mapErlangListToAuctions(auctionList);
 
-                    // Update cache
                     for (Auction auction : auctions) {
                         activeAuctionsCache.put(auction.getId(), auction);
                     }
@@ -642,13 +587,11 @@ public class ErlangService {
     }
 
     public Auction getAuctionDetails(Long auctionId) {
-        // Check cache first
         Auction cached = activeAuctionsCache.get(auctionId);
         if (cached != null) {
             return cached;
         }
 
-        // Otherwise fetch from Erlang
         List<Auction> auctions = fetchActiveAuctionsFromErlang();
         for (Auction auction : auctions) {
             if (auction.getId().equals(auctionId)) {
@@ -661,13 +604,11 @@ public class ErlangService {
     public Map<String, Object> getAuctionStatus(Long auctionId) {
         Map<String, Object> status = new HashMap<>();
 
-        // Get synchronized time using Christian's Algorithm
         Map<String, Object> syncInfo = getAuctionSyncInfo(auctionId);
         long offset = ((Number) syncInfo.get("offset")).longValue();
         long serverTime = System.currentTimeMillis() + offset;
         long rtt = ((Number) syncInfo.get("rtt")).longValue();
 
-        // Get auction details
         Auction auction = getAuctionDetails(auctionId);
 
         if (auction != null) {
@@ -682,7 +623,6 @@ public class ErlangService {
             status.put("endTime", endTime);
             status.put("serverTime", serverTime);
 
-            // Include sync info for transparency
             status.put("timeSync", Map.of(
                     "offset", offset,
                     "rtt", rtt,
@@ -699,26 +639,30 @@ public class ErlangService {
         for (OtpErlangObject obj : erlangList) {
             if (obj instanceof OtpErlangTuple auctionTuple) {
                 try {
-                    //tuple: {AuctionId, ItemId, TimeLeft}
                     Long auctionId = extractLong(auctionTuple.elementAt(0));
                     Long itemId = extractLong(auctionTuple.elementAt(1));
-                    //extracting remaining time
                     Long timeLeft = extractLong(auctionTuple.elementAt(2));
                     Item item = itemService.getItemById(itemId);
 
                     if (item != null) {
+                        // FIX: Mantiene l'offerta se già in cache per non farla resettare al prezzo base!
+                        Auction existing = activeAuctionsCache.get(auctionId);
+                        Double currentBid = (existing != null && existing.getCurrentBid() != null)
+                                ? existing.getCurrentBid()
+                                : item.getStartingPrice();
+                        String highBidder = existing != null ? existing.getHighBidder() : null;
+
                         Auction auction = new Auction(
                                 auctionId,
                                 item,
-                                timeLeft, //Time received from erlang
-                                item.getStartingPrice(),
-                                null,
-                                new ArrayList<>(),
-                                new ArrayList<>()
+                                timeLeft,
+                                currentBid,
+                                highBidder,
+                                existing != null ? existing.getBidHistory() : new ArrayList<>(),
+                                existing != null ? existing.getChatHistory() : new ArrayList<>()
                         );
                         result.add(auction);
 
-                        // update time remaining cache
                         timeRemainingCache.put(auctionId, timeLeft);
                     }
                 } catch (Exception e) {

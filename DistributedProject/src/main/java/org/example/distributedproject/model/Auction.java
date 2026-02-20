@@ -11,7 +11,7 @@ public class Auction {
     private Double currentBid;
     private String highBidder;
     private Double startingPrice;
-    private User winner;
+    private String winner;
     private List<String> chatHistory;
     private List<String> bidHistory;
 
@@ -71,11 +71,11 @@ public class Auction {
         this.startingPrice = startingPrice;
     }
 
-    public User getWinner() {
+    public String getWinner() {
         return winner;
     }
 
-    public void setWinner(User winner) {
+    public void setWinner(String winner) {
         this.winner = winner;
     }
 
@@ -95,7 +95,7 @@ public class Auction {
         this.bidHistory = bidHistory;
     }
 
-    public Auction(Long id, Item item, Long duration, Double startingPrice, User winner, List<String> chatHistory, List<String> bidHistory) {
+    public Auction(Long id, Item item, Long duration, Double startingPrice, String winner, List<String> chatHistory, List<String> bidHistory) {
         this.id = id;
         this.item = item;
         this.duration = duration;
