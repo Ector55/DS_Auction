@@ -154,7 +154,7 @@ public class ErlangService {
             Long timeLeft = extractLong(tuple.elementAt(2));
             messagingTemplate.convertAndSend("/topic/auction/" + auctionId + "/time", timeLeft);
 
-            System.out.println("Asta [" + auctionId + "] tempo rimanente: " + timeLeft + "s");
+            //System.out.println("Auction [" + auctionId + "] Time remaining: " + timeLeft + "s");
         } catch (Exception e) {
             System.err.println("Error parsing timer_tick msg: " + e.getMessage());
         }
