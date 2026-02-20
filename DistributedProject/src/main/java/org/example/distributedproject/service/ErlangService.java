@@ -391,8 +391,8 @@ public class ErlangService {
             };
 
             OtpErlangTuple request = new OtpErlangTuple(msgPayload);
-            tempMbox.send(auctionProcessName, erlangServerNode, request);
-                //new OtpErlangTuple(msgPayload));
+            tempMbox.send(auctionProcessName, erlangWorkerNode, request);
+            //new OtpErlangTuple(msgPayload));
 
             // Wait for response from Erlang
             OtpErlangObject response = tempMbox.receive(5000);
@@ -492,7 +492,6 @@ public class ErlangService {
         if (cached != null) {
             return cached;
         }
-
         // Otherwise query Erlang
         OtpMbox tempMbox = null;
         try {
@@ -504,7 +503,7 @@ public class ErlangService {
                     new OtpErlangAtom("get_remaining_time")
             };
 
-            tempMbox.send(auctionProcessName, erlangServerNode, new OtpErlangTuple(payload));
+            tempMbox.send(auctionProcessName, erlangWorkerNode, new OtpErlangTuple(payload));
             OtpErlangObject response = tempMbox.receive(2000);
 
             if (response instanceof OtpErlangTuple respTuple) {

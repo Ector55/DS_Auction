@@ -90,7 +90,7 @@ public class AuctionController {
     }
 
     @GetMapping("/active")
-    public ResponseEntity<List<Auction>> getActiveAuctions() {
+    public ResponseEntity<?> getActiveAuctions() {
         List<Auction> auctions = erlangService.fetchActiveAuctionsFromErlang();
 
         List<Map<String, Object>> processedAuctions = new ArrayList<>();
