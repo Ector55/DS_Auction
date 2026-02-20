@@ -131,9 +131,10 @@ public class ErlangService {
                     }
                     else if(isAtom(tuple.elementAt(0), "bid_accepted")){
                         handleTimer(tuple);
-                    }  //else {
-//                        System.out.println(" UNKNOWN MESSAGE TYPE: " + tuple.elementAt(0));
-//                    }
+                    }
+                    else if (isAtom(tuple.elementAt(0), "timer_tick")) {
+                        handleTimerTick(tuple);
+                    }
                 }
             } catch (OtpErlangException e) {
                 System.err.println("Erlang connection lost.");
@@ -144,6 +145,19 @@ public class ErlangService {
             }
         }
 
+    }
+
+    private void handleTimerTick(OtpErlangTuple tuple) {
+        try {
+            //tuple:{timer_tick, AuctionId, NewTime}
+            String auctionId = tuple.elementAt(1).toString();
+            Long timeLeft = extractLong(tuple.elementAt(2));
+            messagingTemplate.convertAndSend("/topic/auction/" + auctionId + "/time", timeLeft);
+
+            System.out.println("Asta [" + auctionId + "] tempo rimanente: " + timeLeft + "s");
+        } catch (Exception e) {
+            System.err.println("Error parsing timer_tick msg: " + e.getMessage());
+        }
     }
 
     //handle unsold items
@@ -189,11 +203,16 @@ public class ErlangService {
 
     private void handleTimer(OtpErlangTuple tuple){
         try {
-            Double amount = extractDouble(tuple.elementAt(1));
-            Double time = extractDouble(tuple.elementAt(2));
-            System.out.println("Timer Extended by 30 seconds");
+            //Tuple {bid_accepted, AuctionID, Amount, UserName}
+            String auctionId = tuple.elementAt(1).toString();
+            Double amount = extractDouble(tuple.elementAt(2));
+            String bidderName = extractString(tuple.elementAt(3));
+
+            System.out.println("Timer Extended by 30 seconds on auction " + auctionId + " due to bid of " + amount + " by " + bidderName);
+            messagingTemplate.convertAndSend("/topic/auction/" + auctionId + "/time", 30L);
+
         } catch (Exception e) {
-            System.err.println("Error handling bid_accepted msg");
+            System.err.println("Error handling bid_accepted msg: " + e.getMessage());
         }
     }
 

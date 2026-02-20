@@ -84,6 +84,7 @@ loop(State) ->
           handle_winner(State); %% Auction ended go to handle_winner
         true ->
           erlang:send_after(1000, self(), clock),  %% Continue countdown
+          {?JAVA_MAILBOX, ?JAVA_NODE} ! {timer_tick, State#state.auction_id, NewTime},
           if
             NewTime rem 30 =:= 0 ->
               io:format("[AUCTION ~p] ~p seconds remaining~n",
