@@ -5,21 +5,20 @@
 %%% Auction Handler - manages timer, bids, and winner selection
 %%% Each auction runs as a separate process
 %%% @end
-%%% Created : 02. gen 2026 17:05
 %%%-------------------------------------------------------------------
 -module('DS_auction_handler').
 -author("crazy").
 
 %% API
--export([start/1, loop/1]).
+-export([start/1, loop/1]). %main loop to handle auction logic
 
--export([get_server_time/1, get_server_time/2, sync_time/1, sync_time/2]).
+-export([get_server_time/1, get_server_time/2, sync_time/1, sync_time/2]). %time synchronization functions
 
 -define(JAVA_NODE, 'java_node@10.2.1.25').
 -define(MANAGER_NODE, 'auction_service@10.2.1.48').
 -define(JAVA_MAILBOX, 'java_listener').
 
-%%State record
+%%State record to hold auction information
 -record(state, {
   auction_id,
   item_id,
@@ -29,7 +28,7 @@
   high_bidder_name = "None",
   time_remaining,
   bids_history = [],
-  extend_threshold = 30,
+  extend_threshold = 30, %timer reset threshold in seconds
   server_start_time
 }).
 
@@ -46,7 +45,7 @@ idle_loop(AuctionID) ->
       io:format("[AUCTION ~p] Loaded new item: ~s (Id = ~p) Starting price: ~p, Duration: ~p s~n",
         [AuctionID, ItemName, ItemId, StartingPrice, Duration]),
       erlang:send_after(1000, self(), clock),
-      InitialState = #state{
+      InitialState = #state{ %initial state with the loaded item
         auction_id = AuctionID,
         item_id = ItemId,
         item_name = ItemName,
@@ -55,6 +54,7 @@ idle_loop(AuctionID) ->
         server_start_time = erlang:system_time(millisecond)
       },
       loop(InitialState);
+    
       {ClientPid, bid, _UserId, _Amount, UserName} ->
       io:format("[AUCTION ~p] Bid rejected for ~s: auction not started yet~n", [AuctionID, UserName]),
       {?JAVA_MAILBOX, ?JAVA_NODE} ! {bid_rejected, AuctionID, UserName, not_started},
@@ -71,20 +71,19 @@ idle_loop(AuctionID) ->
   end.
 
 
-%%main Loop - to receive and handle messages
-
+%%main Loop - to receive and handle different messages
 loop(State) ->
   receive
-  %% CLOCK TICK - Decrements timer every second
+  %%CLOCK TICK - Decrements timer every second to simulate auction countdown
     clock ->
       NewTime = State#state.time_remaining - 1,
 
       if
         NewTime =< 0 ->
-          handle_winner(State); %% Auction ended go to handle_winner
+          handle_winner(State); %%Auction ended go to handle_winner
         true ->
           erlang:send_after(1000, self(), clock),  %% Continue countdown
-          {?JAVA_MAILBOX, ?JAVA_NODE} ! {timer_tick, State#state.auction_id, NewTime},
+          {?JAVA_MAILBOX, ?JAVA_NODE} ! {timer_tick, State#state.auction_id, NewTime}, %%notify java of the timer tick
           if
             NewTime rem 30 =:= 0 ->
               io:format("[AUCTION ~p] ~p seconds remaining~n",
@@ -93,17 +92,15 @@ loop(State) ->
               ok
           end,
 
-          loop(State#state{time_remaining = NewTime})
+          loop(State#state{time_remaining = NewTime}) %%update the state with the new time
       end;
 
   %%handle incoming bid
-
     {ClientPid, bid, UserId, Amount, UserName} ->
-      NewState = handle_bid(State, ClientPid, UserId, Amount, UserName),
-      loop(NewState);
+      NewState = handle_bid(State, ClientPid, UserId, Amount, UserName), %call the handle_bid function
+      loop(NewState); %update the state with the new bid information
 
   %%return current auction state
-
     {get_status, ClientPid} ->
       Status = #{
         auction_id => State#state.auction_id,
@@ -117,7 +114,6 @@ loop(State) ->
       loop(State);
 
   %%Return bid history
-
     {get_history, ClientPid} ->
       ClientPid ! {history, lists:reverse(State#state.bids_history)},
       loop(State);
@@ -126,18 +122,19 @@ loop(State) ->
       ServerTime = erlang:system_time(millisecond),
       ClientPid ! {time_response, ServerTime},
       loop(State);
-
-    {'$gen_call', {From, MRef}, get_remaining_time} ->
+    %% Manual OTP gen_server:call protocol handler for Manager's health checks
+    %% Instant response proves slot is alive; if timeout the Manager restarts slot
+    {'$gen_call', {From, MRef}, get_remaining_time} -> %
       From ! {MRef, State#state.time_remaining},
       loop(State);
 
-  %%UNKNOWN MESSAGE - ignore and continue loop
+  %%UNKNOWN MESSAGE, ignore and continue loop
     _Other ->
       loop(State)
 
   end.
 
-%%Validates and processes a bid
+%%Validates and processes a bid and sends java the updates
 handle_bid(State, ClientPid, UserId, Amount, UserName) ->
   AuctionID = State#state.auction_id,
   CurrentBid = State#state.current_bid,
@@ -202,7 +199,7 @@ handle_bid(State, ClientPid, UserId, Amount, UserName) ->
       }
   end.
 
-%%Handle Winner - called when the auction timer reaches 0
+%%Handle Winner, called when the auction timer reaches 0
 handle_winner(State) ->
   AuctionID = State#state.auction_id,
   Winner = State#state.high_bidder,
@@ -220,12 +217,13 @@ handle_winner(State) ->
       %% no bids - items will go back to pending
       {?JAVA_MAILBOX, ?JAVA_NODE} ! {auction_unsold, State#state.item_id},
       io:format("[AUCTION ~p] No bids - item ~p will be returned to pending state~n", [AuctionID, State#state.item_id]);
-    _ ->
-      {JavaWinner,WinnerName} = case Winner of
-                                  Winner when is_list(Winner) -> {list_to_binary(Winner), State#state.high_bidder_name};
-                                  Winner when is_atom(Winner) -> {list_to_binary(atom_to_list(Winner)), State#state.high_bidder_name};
-                                  Winner -> {list_to_binary(io_lib:format("~p", [Winner])), State#state.high_bidder_name}
-                                end,
+    _ -> %sold, notify java with winner details
+      {JavaWinner,WinnerName} = 
+        case Winner of
+          Winner when is_list(Winner) -> {list_to_binary(Winner), State#state.high_bidder_name};
+          Winner when is_atom(Winner) -> {list_to_binary(atom_to_list(Winner)), State#state.high_bidder_name};
+          Winner -> {list_to_binary(io_lib:format("~p", [Winner])), State#state.high_bidder_name}
+        end,
       {?JAVA_MAILBOX, ?JAVA_NODE} ! {auction_closed, State#state.item_id, JavaWinner, WinnerName, FinalPrice},
       io:format("[AUCTION ~p] SOLD! ~s for ~p to ~s~n",
         [AuctionID, ItemName, FinalPrice, State#state.high_bidder_name])
@@ -242,13 +240,12 @@ handle_winner(State) ->
   %%Unregister the process name to allow reuse of the ID later
   catch unregister(list_to_atom("auction_" ++ integer_to_list(AuctionID))),
 
-  %% TERMINATE the process
-
+  %%terminate the process
   io:format("[AUCTION ~p] Cleaning up process and freeing slot...~n", [AuctionID]),
   exit(normal).
 
 
-%%Get raw  server time from auction process
+%%Get raw server time from auction process
 get_server_time(AuctionID) ->
   get_server_time(AuctionID, node()).
 
@@ -264,16 +261,18 @@ get_server_time(AuctionID, Node) ->
   end.
 
 %synchronize local time with server time using Cristian's algorithm
-% sync with local auction (same node)
+%Available for external clients to call if they need to sync clocks with an auction server
 sync_time(AuctionID) ->
   sync_time(AuctionID, node()).
 
 %sync with remote auction (across nodes)
 sync_time(AuctionID, Node) ->
+  %Send time request and record local send time
   AuctionName = list_to_atom("auction_" ++ integer_to_list(AuctionID)),
-  T1 = erlang:system_time(millisecond),
+  T1 = erlang:system_time(millisecond), %local time before sending request
   {AuctionName, Node} ! {get_time, self()},
   receive
+    %Receive server time response and calculate RTT and offset
     {time_response, ServerTime} ->
       T2 = erlang:system_time(millisecond),
       RTT = T2 - T1,

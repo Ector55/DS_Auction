@@ -1,3 +1,12 @@
+%%%-------------------------------------------------------------------
+%%% @author crazy
+%%% @copyright (C) 2026, <COMPANY>
+%%% @doc
+%%% chat Handler - Manages the chat functionality for each auction.
+%%% Each auction has its own chat process that handles messages.
+%%% @end
+%%%-------------------------------------------------------------------
+
 -module(chat_handler).
 -author("crazy").
 
@@ -7,10 +16,10 @@
 -define(JAVA_NODE, 'java_node@10.2.1.25').
 -define(JAVA_MAILBOX, 'java_listener').
 
-%%Starts the chat process for a specific auction.
+%%Starts the chat process for the specific auction.
 start(AuctionID) ->
   Name = list_to_atom("chat_" ++ integer_to_list(AuctionID)),
-
+  %checks if a chat already exists or not
   case whereis(Name) of
     undefined ->
       register(Name, self()),
@@ -21,6 +30,7 @@ start(AuctionID) ->
       ok
   end.
 
+%%Main loop to handle chat messages and participant management
 loop(AuctionID, Participants) ->
   receive
   %%A user joins the auction chat from an Erlang terminal
@@ -31,11 +41,11 @@ loop(AuctionID, Participants) ->
 
   %%user sends a message
     {post_message, FromUser, Content} ->
-      %% show message on erlang console
+      %% show message on erlang console with user's information 
       io:format("[CHAT ~p] ~s: ~s~n", [AuctionID, FromUser, Content]),
       Timestamp = erlang:system_time(second),
 
-      %%BROADCAST to Erlang participants (Other terminals)
+      %%Broadcasts to Erlang participants (Other terminals)
       Message = #{
         auction_id => AuctionID,
         user => FromUser,
@@ -44,12 +54,11 @@ loop(AuctionID, Participants) ->
       },
       lists:foreach(fun(Pid) -> Pid ! {chat_msg, Message} end, Participants),
 
-      %%NOTIFY JAVA (To show messages on the Web Frontend)
-      %%Protocol: {chat_msg, AuctionID, User, Content}
+      %%notify java
       {?JAVA_MAILBOX, ?JAVA_NODE} ! {chat_msg, AuctionID, FromUser, Content},
 
       loop(AuctionID, Participants);
-
+    %%user leaves the chat
     {'DOWN', _Ref, process, Pid, _Reason} ->
       loop(AuctionID, lists:delete(Pid, Participants));
 

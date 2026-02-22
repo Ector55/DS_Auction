@@ -1,8 +1,9 @@
 package org.example.distributedproject.service;
 
-import com.ericsson.otp.erlang.*;
-import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.example.distributedproject.model.Auction;
 import org.example.distributedproject.model.Item;
 import org.example.distributedproject.model.User;
@@ -12,10 +13,24 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import com.ericsson.otp.erlang.OtpErlangAtom;
+import com.ericsson.otp.erlang.OtpErlangBinary;
+import com.ericsson.otp.erlang.OtpErlangDouble;
+import com.ericsson.otp.erlang.OtpErlangException;
+import com.ericsson.otp.erlang.OtpErlangList;
+import com.ericsson.otp.erlang.OtpErlangLong;
+import com.ericsson.otp.erlang.OtpErlangObject;
+import com.ericsson.otp.erlang.OtpErlangPid;
+import com.ericsson.otp.erlang.OtpErlangRef;
+import com.ericsson.otp.erlang.OtpErlangString;
+import com.ericsson.otp.erlang.OtpErlangTuple;
+import com.ericsson.otp.erlang.OtpMbox;
+import com.ericsson.otp.erlang.OtpNode;
 
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
+//Service responsible for managing communication between the Java application and the Erlang auction server, 
+//handling bid placements, chat messages, and synchronization of auction state.
 @Service
 public class ErlangService {
 
@@ -35,8 +50,8 @@ public class ErlangService {
     private OtpMbox mainMbox;
 
     private final String erlangNodeName = "java_node@10.2.1.25";
-    private final String erlangServerNode = "auction_service@10.2.1.48";
-    private final String erlangWorkerNode = "worker@10.2.1.13";
+    private final String erlangServerNode = "auction_service@10.2.1.48"; //IP of the container with the Erlang server
+    private final String erlangWorkerNode = "worker@10.2.1.13"; //IP of the container with the Erlang worker
     private final String cookie = "mypassword";
 
     @PostConstruct
@@ -60,7 +75,8 @@ public class ErlangService {
                     new OtpErlangString(user),
                     new OtpErlangString(message)
             };
-            mainMbox.send(chatProcessName, erlangWorkerNode, new OtpErlangTuple(msgPayload));            System.out.println("Chat message sent to " + chatProcessName + "@" + erlangServerNode);
+            mainMbox.send(chatProcessName, erlangWorkerNode, new OtpErlangTuple(msgPayload));            
+            System.out.println("Chat message sent to " + chatProcessName + "@" + erlangServerNode);
         } catch (Exception e) {
             System.err.println("Error sending chat to Erlang: " + e.getMessage());
         }
@@ -83,6 +99,7 @@ public class ErlangService {
                     new OtpErlangDouble(amount),
                     new OtpErlangString(username)
             };
+            //send bid request to the specific auction process in Erlang
             tempMbox.send(auctionProcessName, erlangWorkerNode, new OtpErlangTuple(payload));
             OtpErlangObject response = tempMbox.receive(5000);
 
@@ -125,7 +142,6 @@ public class ErlangService {
                     else if (isAtom(tuple.elementAt(0), "new_bid")) {
                         handleNewBid(tuple);
                     }
-
                     else if (isAtom(tuple.elementAt(0), "bid_rejected")){
                         handleBidRejected(tuple);
                     }
@@ -146,7 +162,7 @@ public class ErlangService {
         }
 
     }
-
+//handle timer ticks to update remaining time for auctions
     private void handleTimerTick(OtpErlangTuple tuple) {
         try {
             //tuple:{timer_tick, AuctionId, NewTime}
@@ -218,19 +234,16 @@ public class ErlangService {
 
     private void handleIncomingChatMessage(OtpErlangTuple tuple) {
         try {
-            // expected tuple: {chat_msg, AuctionId, User, Text}
+            //tuple: {chat_msg, AuctionId, User, Text}
             String auctionIdStr = tuple.elementAt(1).toString();
-            // Parse ID as Long to ensure compatibility with Map keys
             Long auctionId = Long.parseLong(auctionIdStr);
             String user = extractString(tuple.elementAt(2));
             String text = extractString(tuple.elementAt(3));
 
             System.out.println("Chat from Erlang [" + auctionId + "] " + user + ": " + text);
-
-            // 1. SAVE to history for future retrievals
+            //save to history 
             auctionBidService.addChatMessage(auctionId, user, text);
-
-            // 2. BROADCAST to current subscribers via WebSocket
+            //broadcast to current subscribers via WebSocket
             messagingTemplate.convertAndSend("/topic/auction/" + auctionId, new ChatMessageDto(user, text));
         } catch (Exception e) {
             System.err.println("Error parsing chat msg: " + e.getMessage());
@@ -251,15 +264,13 @@ public class ErlangService {
             e.printStackTrace();
         }
     }
-
+    //handle manager requesting new items to start auctions
     private void handleGetNextAuctions(OtpErlangTuple tuple) {
         try {
             OtpErlangPid senderPid = (OtpErlangPid) tuple.elementAt(0);
             OtpErlangRef msgId = (OtpErlangRef) tuple.elementAt(1);
-
             int requestedCount = ((OtpErlangLong) tuple.elementAt(3)).intValue();
             System.out.println("[JAVA] Requested " + requestedCount + " items");
-
             if (requestedCount > 0) {
                 Item item = itemService.activateAndGetNextItem();
                 OtpErlangList auctionList;
@@ -280,7 +291,7 @@ public class ErlangService {
             }
         } catch (Exception e) { e.printStackTrace(); }
     }
-
+    //utility methods to parse different Erlang types safely
     private boolean isAtom(OtpErlangObject obj, String val) {
         return obj instanceof OtpErlangAtom atom && atom.atomValue().equals(val);
     }
@@ -303,16 +314,18 @@ public class ErlangService {
         if (obj instanceof OtpErlangDouble d) return (long) d.doubleValue();
         return 0L;
     }
-
+    //Clean up resources on shutdown
     @PreDestroy
     public void shutdown() {
         if (node != null) node.close();
     }
 
+    
     public record ChatMessageDto(String user, String message) {}
     public record BidUpdateDto(Double price, String bidder) {}
 
 
+    //method to fetch active auctions from Erlang and synchronize with Java state
     public List<Auction> fetchActiveAuctionsFromErlang() {
         OtpMbox tempMbox = null;
         OtpErlangList auctionList = null;
@@ -329,9 +342,8 @@ public class ErlangService {
             System.out.println("DEBUG: Raw Erlang response: " + response);
 
             if (response instanceof OtpErlangTuple respTuple) {
-                //expected: {Ref, active_auctions_response, [List]}
+                //tuple: {Ref, active_auctions_response, [List]}
                 OtpErlangAtom status = (OtpErlangAtom) respTuple.elementAt(1);
-
                 if ("active_auctions_response".equals(status.atomValue())) {
                     auctionList = (OtpErlangList) respTuple.elementAt(2);
                     List<Auction> auctions = mapErlangListToAuctions(auctionList);
@@ -347,9 +359,9 @@ public class ErlangService {
         return new ArrayList<>();
     }
 
+//method to convert Erlang list of auctions into Java Auction objects
     private List<Auction> mapErlangListToAuctions(OtpErlangList erlangList) {
         List<Auction> result = new ArrayList<>();
-
         for (OtpErlangObject obj : erlangList) {
             if (obj instanceof OtpErlangTuple auctionTuple) {
                 try {
@@ -359,7 +371,6 @@ public class ErlangService {
                     //extracting remaining time
                     Long timeLeft = extractLong(auctionTuple.elementAt(2));
                     Item item = itemService.getItemById(itemId);
-
                     if (item != null) {
                         Auction auction = new Auction(
                                 auctionId,

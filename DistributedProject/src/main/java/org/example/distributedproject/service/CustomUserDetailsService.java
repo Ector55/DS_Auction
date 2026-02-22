@@ -1,5 +1,7 @@
 package org.example.distributedproject.service;
 
+import java.util.ArrayList;
+
 import org.example.distributedproject.model.User;
 import org.example.distributedproject.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -7,8 +9,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
-
-import java.util.ArrayList;
+//Service to load user-specific data for authentication and authorization.
 
 @Service
 public class CustomUserDetailsService implements UserDetailsService {

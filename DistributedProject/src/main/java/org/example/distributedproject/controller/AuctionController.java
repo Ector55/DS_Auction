@@ -1,5 +1,8 @@
 package org.example.distributedproject.controller;
 
+import java.util.List;
+import java.util.Map;
+
 import org.example.distributedproject.model.Auction;
 import org.example.distributedproject.model.Item;
 import org.example.distributedproject.repository.ItemRepository;
@@ -8,13 +11,15 @@ import org.example.distributedproject.service.ErlangService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
-import java.util.Map;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 
 //Controller responsible for handling Auction-related operations.
-//It acts as a bridge between the frontend, the database, and the Erlang backend node.
 @RestController
 @RequestMapping("/api/auctions")
 public class AuctionController {
@@ -25,8 +30,8 @@ public class AuctionController {
     @Autowired
     private AuctionBidService auctionBidService;
 
-   @Autowired
-   private ErlangService erlangService;
+    @Autowired
+    private ErlangService erlangService;
 
     //Endpoint to finalize an auction.
     @PostMapping("/close")
@@ -39,7 +44,7 @@ public class AuctionController {
             itemRepository.save(item);
         }
     }
-
+    //endpoint to bid
     @PostMapping("/{id}/bid")
     public ResponseEntity<?> bid(@PathVariable Long id, @RequestBody Double amount) {
         String currentUser = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -58,7 +63,6 @@ public class AuctionController {
         }
     }
 
-
   //Endpoint to handle sending chat messages within a specific auction.
     @PostMapping("/{id}/chat")
     public ResponseEntity<?> postChatMessage(@PathVariable int id, @RequestBody String message) {
@@ -67,6 +71,7 @@ public class AuctionController {
         return ResponseEntity.ok().build(); //200 OK message
     }
 
+    //endpoint to fetch active auctions
     @GetMapping("/active")
     public ResponseEntity<List<Auction>> getActiveAuctions() {
         return ResponseEntity.ok(erlangService.fetchActiveAuctionsFromErlang());
