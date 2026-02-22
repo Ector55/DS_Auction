@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add item</title>
+    <link rel="stylesheet" href="src/auth.css">
+</head>
+
+<body>  
+    <div class="auth-container">
+        <h2>Add Your item for Auction</h2>
+        <form action="/add_item" method="POST" class="form-grid">
+            
+        <div class="form-group">
+            <label for="name">Title</label>
+            <input type="text" id="name" name="name" placeholder="Item Title" required>
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <input type="text" id="description" name="description" placeholder="Item Description" required>
+        </div>
+
+        <div class="form-group">
+            <label for="type">Type</label>
+            <input type="text" id="type" name="type" placeholder="Item Type" required>
+        </div>
+
+        <div class="form-group">
+            <label for="starting_price">Starting Price</label>
+            <input type="number" id="starting_price" name="starting_price" placeholder="Starting Price" required>
+        </div>
+
+        <div class="form-group">
+            <label for="image">Image</label>
+            <input type="text" id="image" name="image" placeholder="Image URL" required>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn">Add Item</button>
+        </div>
+        <div class="auth-footer">
+            <a href="index.html">Back to Home</a>
+
+
+</body>

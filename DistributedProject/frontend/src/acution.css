@@ -194,3 +194,18 @@ body{
     font-family: 'Press Start 2P', cursive;
     border-radius: 8px;
 }
+
+.div7 { /* Auction Section */
+    grid-column-start: 2;
+    grid-row-start: 6;
+    background-color: rgb(229, 2, 221);
+    padding: 5px;
+    border-radius: 8px;
+    height: 90%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 3px solid #ffee36;
+    box-shadow: 0 0 10px #ffee36, inset 0 0 20px rgba(0, 243, 255, 0.2);
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}

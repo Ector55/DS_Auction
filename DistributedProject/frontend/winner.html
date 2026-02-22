@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auction #1 - Ended</title>
+    <link rel="stylesheet" href="src/auth.css">
+</head>
+<body>
+
+    <div class="auth-container auction-layout">
+        <div class="auction-header">
+            <span class="status-badge">CLOSED</span>
+            <h2>Retro Console Gameboy</h2>
+        </div>
+        <div class="item-display">
+            <div class="pixel-placeholder">
+                <div class="div1" style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+            <span class="title" style="margin-bottom: 10px;">Element</span>
+            <img src="./src/cane.jpg" alt="Oggetto in Asta" style="
+                width: 90%; 
+                height: auto; 
+                max-height: 70%;
+                border-radius: 8px; 
+                border: 2px solid #00f3ff; 
+                box-shadow: 0 0 15px #00f3ff, inset 0 0 10px rgba(0, 243, 255, 0.5);
+                object-fit: cover;
+            ">
+        </div>
+            </div>
+            <div class="auction-stats">
+                <p>Last Bidder: <span style="color: #aaa;">Unknown</span></p>
+                <p>Timer: <span style="color: #ff0055;">00:00:00</span></p>
+            </div>
+        </div>
+        
+        <a href="home.html" class="btn">Back to Auctions</a>
+    </div>
+    <div id="winner-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h1 class="blink-text">TIME EXPIRED!</h1>
+            
+            <div class="winner-trophy">
+                🏆 WINNER 🏆
+            </div>
+
+            <p class="winner-name">Pippo26</p>
+            
+            <div class="winning-price-box">
+                <span class="label">SOLD FOR:</span>
+                <span class="price">€ 150.00</span>
+            </div>
+
+            <button onclick="closeModal()" class="btn btn-success">CLAIM REWARD</button>
+        </div>
+    </div>
+
+    <script>
+        function closeModal() {
+            document.getElementById('winner-modal').style.display = 'none';
+        }
+    </script>
+
+</body>
+</html>

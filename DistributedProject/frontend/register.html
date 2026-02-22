@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - DS Auction</title>
+    <link rel="stylesheet" href="src/auth.css">
+</head>
+<body>
+    <div class="auth-container">
+        <h2>Create Account</h2>
+        <form action="/register" method="POST" class="form-grid">
+            
+            <div class="form-group">
+                <label for="name">Name</label>
+                <input type="text" id="name" name="name" placeholder="Your Name" required>
+            </div>
+            <div class="form-group">
+                <label for="surname">Surname</label>
+                <input type="text" id="surname" name="surname" placeholder="Your Surname" required>
+            </div>
+            <div class="form-group">
+                <label for="reg-username">Username</label>
+                <input type="text" id="reg-username" name="username" placeholder="Choose a username" required>
+            </div>
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" placeholder="your@email.com" required>
+            </div>
+            <div class="form-group">
+                <label for="age">Age</label>
+                <input type="number" id="age" name="age" placeholder="Your age" required>
+            </div>
+            <div class="form-group">
+                <label for="payment-info">Payment Info</label>
+                <input type="text" id="payment-info" name="payment-info" placeholder="Card or ID" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="reg-password">Password</label>
+                <input type="password" id="reg-password" name="password" placeholder="Create password" required>
+            </div>
+            <div class="form-group">
+                <label for="confirm-password">Confirm Password</label>
+                <input type="password" id="confirm-password" name="confirm-password" placeholder="Repeat password" required>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn">Register</button>
+            </div>
+        </form>
+        <div class="auth-footer">
+            Already have an account? <a href="login.html">Login</a>
+            <br>
+            <a href="homepage.html">Back to Home</a>
+        </div>
+    </div>
+</body>
+</html>

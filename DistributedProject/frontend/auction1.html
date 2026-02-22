@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
+<head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Document</title>
@@ -11,24 +11,35 @@
 <body>
     <div class="parent"> 
         <div class="div0">DS Auction</div>
-        <div class="div1">
-            <span class="title">Element</span>
+        
+        <div class="div1" style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
+            <span class="title" style="margin-bottom: 10px;">Element</span>
+            <img src="./src/cane.jpg" alt="Oggetto in Asta" style="
+                width: 90%; 
+                height: auto; 
+                max-height: 70%;
+                border-radius: 8px; 
+                border: 2px solid #00f3ff; 
+                box-shadow: 0 0 15px #00f3ff, inset 0 0 10px rgba(0, 243, 255, 0.5);
+                object-fit: cover;
+            ">
         </div>
+
         <div class="div2">Bid</div>
         <div class="div3" onclick="location.href='index.html'">Exit</div>
+        
         <div class="div4">
             <span class="title">Chat</span>
             <div class="chatSection">
-
-            </div>
+                </div>
             <textarea class="chatText" placeholder="Enter text here..."></textarea>
         </div>
+        
         <div class="div5">
             <span class="title">Price History</span>
             <div class="history">
-
-            </div>
+                </div>
         </div>
     </div>
-  </body>
+</body>
 </html>

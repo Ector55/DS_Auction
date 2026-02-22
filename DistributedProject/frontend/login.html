@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - DS Auction</title>
+    <link rel="stylesheet" href="src/auth.css">
+</head>
+<body>
+    <div class="auth-container" style="max-width: 450px;">
+        
+        <h2>System Login</h2>
+        
+        <form action="/login" method="POST">
+            
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" placeholder="Insert Coin (Username)" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" placeholder="******" required>
+            </div>
+            <button type="submit" class="btn">Enter World</button>
+            
+        </form>
+        <div class="auth-footer">
+            <p>New Player?</p>
+            <a href="register.html" style="color: #ff00ff;">Create Profile (Register)</a>
+            <br><br>
+            <a href="homepage.html">Back to Main Menu</a>
+        </div>
+        
+    </div>
+
+</body>
+</html>
